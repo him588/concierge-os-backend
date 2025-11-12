@@ -57,7 +57,10 @@ export async function VerifyUser(req: Request, res: Response) {
   }
   if (isExist) {
     if (dbOtp === otp) {
-      await User.findByIdAndUpdate(userId, { isVerified: true });
+      await User.findByIdAndUpdate(userId, {
+        $set: { isVerified: true },
+        $unset: { expireAt: "" },
+      });
       await client.del(`OTP${userId}`);
       const accessToken = jwt.sign(
         { userId, email },
@@ -172,5 +175,80 @@ export async function ResendOtp(req: Request, res: Response) {
   } catch (error) {
     console.error("ResendOtp error:", error);
     return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function googleAuth(req: Request, res: Response) {
+  try {
+    const { code } = req.body;
+    if (!code || typeof code !== "string")
+      return res.status(400).json({ error: "invalid code" });
+
+    const resp = await fetch(
+      `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${encodeURIComponent(
+        code
+      )}`
+    );
+    if (!resp.ok) return res.status(502).json({ error: "google fetch failed" });
+
+    const data = await resp.json();
+    const email = data.email;
+    const name = data.name || data.given_name || "User";
+    if (!email) return res.status(400).json({ error: "no email from google" });
+
+    const user = await User.findOne({ email, role: "owner" });
+    const userId = user?._id;
+
+    if (!user) {
+      const newUser = new User({
+        name,
+        email,
+        role: "owner",
+        isVerified: true,
+      });
+      newUser.save();
+      const newUserId = newUser._id;
+      const accessToken = jwt.sign(
+        { newUserId, email },
+        process.env.AccessTokenSecret || "",
+        { expiresIn: "5m" }
+      );
+      const refreshToken = jwt.sign(
+        { newUserId, email },
+        process.env.RefreshTokenSecret || "",
+        { expiresIn: "1d" }
+      );
+
+      return res.status(201).json({
+        user: { id: newUserId, name, email },
+        accessToken,
+        refreshToken,
+      });
+    }
+
+    const accessToken = jwt.sign(
+      { userId, email },
+      process.env.AccessTokenSecret || "",
+      { expiresIn: "5m" }
+    );
+    const refreshToken = jwt.sign(
+      { userId, email },
+      process.env.RefreshTokenSecret || "",
+      { expiresIn: "1d" }
+    );
+
+    return res.status(200).json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      refreshToken,
+      accessToken,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "server error" });
   }
 }

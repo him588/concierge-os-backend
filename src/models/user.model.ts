@@ -12,6 +12,7 @@ export interface IUser extends Document {
   createdAt: Date;
   updatedAt: Date;
   expireAt?: Date;
+  refreshToken: string;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -27,6 +28,7 @@ const UserSchema = new Schema<IUser>(
     hotelId: { type: Schema.Types.ObjectId, ref: "Hotel" },
     isVerified: { type: Boolean, default: false },
     expireAt: { type: Date, default: undefined },
+    refreshToken: { type: String, required: true },
   },
   { timestamps: true }
 );
@@ -37,7 +39,7 @@ UserSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
 UserSchema.pre("save", function (next) {
   if (!this.isVerified && !this.expireAt) {
-    this.expireAt = new Date(Date.now() + 15 * 60 * 1000);
+    this.expireAt = new Date(Date.now() + 1 * 60 * 1000);
   }
 
   if (this.isVerified && this.expireAt) {
