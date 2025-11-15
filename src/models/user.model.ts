@@ -28,7 +28,7 @@ const UserSchema = new Schema<IUser>(
     hotelId: { type: Schema.Types.ObjectId, ref: "Hotel" },
     isVerified: { type: Boolean, default: false },
     expireAt: { type: Date, default: undefined },
-    refreshToken: { type: String, required: true },
+    refreshToken: { type: String },
   },
   { timestamps: true }
 );

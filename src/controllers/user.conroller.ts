@@ -48,7 +48,7 @@ export async function RegisterUser(req: Request, res: Response) {
 
 export async function VerifyUser(req: Request, res: Response) {
   const { userId, otp, email } = req.body;
-  console.log("all the otp", otp);
+  console.log("all the otp", userId, otp, email);
   const isExist = await User.findById(userId);
   const dbOtp = await client.get(`OTP${userId}`);
   console.log("otp from db", dbOtp);
@@ -57,11 +57,6 @@ export async function VerifyUser(req: Request, res: Response) {
   }
   if (isExist) {
     if (dbOtp === otp) {
-      await User.findByIdAndUpdate(userId, {
-        $set: { isVerified: true },
-        $unset: { expireAt: "" },
-      });
-      await client.del(`OTP${userId}`);
       const accessToken = jwt.sign(
         { userId, email },
         process.env.AccessTokenSecret || "",
@@ -72,6 +67,12 @@ export async function VerifyUser(req: Request, res: Response) {
         process.env.RefreshTokenSecret || "",
         { expiresIn: "1d" }
       );
+      await User.findByIdAndUpdate(userId, {
+        $set: { isVerified: true, refreshToken },
+        $unset: { expireAt: "" },
+      });
+      await client.del(`OTP${userId}`);
+
       return res.status(200).json({ accessToken, refreshToken });
     } else {
       return res.status(403).json({ message: "Wrong otp" });
@@ -118,6 +119,8 @@ export async function LoginUser(req: Request, res: Response) {
       process.env.RefreshTokenSecret || "",
       { expiresIn: "1d" }
     );
+
+    await User.findByIdAndUpdate(user._id, { $set: { refreshToken } });
 
     return res.status(200).json({
       accessToken,
@@ -167,10 +170,8 @@ export async function ResendOtp(req: Request, res: Response) {
       "5"
     );
 
-    // 7️⃣ Send success response
     return res.status(200).json({
       message: "OTP resent successfully",
-      otp, // ⚠️ remove this in production (only for testing)
     });
   } catch (error) {
     console.error("ResendOtp error:", error);
@@ -219,6 +220,8 @@ export async function googleAuth(req: Request, res: Response) {
         { expiresIn: "1d" }
       );
 
+      newUser.refreshToken = refreshToken;
+      await newUser.save();
       return res.status(201).json({
         user: { id: newUserId, name, email },
         accessToken,
@@ -237,6 +240,8 @@ export async function googleAuth(req: Request, res: Response) {
       { expiresIn: "1d" }
     );
 
+    await User.findByIdAndUpdate(userId, { $set: { refreshToken } });
+
     return res.status(200).json({
       user: {
         id: user._id,
@@ -250,5 +255,49 @@ export async function googleAuth(req: Request, res: Response) {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "server error" });
+  }
+}
+
+export async function refreshAccessToken(req: Request, res: Response) {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ message: "Refresh token is required" });
+    }
+
+    // 1️⃣ Verify refresh token
+    jwt.verify(
+      refreshToken,
+      process.env.RefreshTokenSecret || "",
+      async (err: any, decoded: any) => {
+        if (err) {
+          return res.status(401).json({ message: "Invalid refresh token" });
+        }
+
+        const { userId, email } = decoded;
+
+        // 2️⃣ Check DB if this refresh token matches
+        const user = await User.findById(userId);
+        if (!user || user.refreshToken !== refreshToken) {
+          return res.status(403).json({ message: "Token mismatch" });
+        }
+
+        // 3️⃣ Generate new Access Token
+        const accessToken = jwt.sign(
+          { userId, email },
+          process.env.AccessTokenSecret || "",
+          { expiresIn: "5m" }
+        );
+
+        return res.status(200).json({
+          message: "Token refreshed successfully",
+          accessToken,
+        });
+      }
+    );
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 }
