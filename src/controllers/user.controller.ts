@@ -5,6 +5,7 @@ import { generateOtp4 } from "../helper/helper";
 import { sendOtpEmail } from "../utils/send-email";
 import client from "../utils/redis-client";
 import jwt from "jsonwebtoken";
+import JWTProvider from "../common/jwt-provider";
 
 export async function RegisterUser(req: Request, res: Response) {
   const { name, email, password } = req.body;
@@ -57,16 +58,9 @@ export async function VerifyUser(req: Request, res: Response) {
   }
   if (isExist) {
     if (dbOtp === otp) {
-      const accessToken = jwt.sign(
-        { userId, email },
-        process.env.AccessTokenSecret || "",
-        { expiresIn: "5m" }
-      );
-      const refreshToken = jwt.sign(
-        { userId, email },
-        process.env.RefreshTokenSecret || "",
-        { expiresIn: "1d" }
-      );
+      const accessToken = JWTProvider.generateAccessToken({ userId, email });
+      const refreshToken = JWTProvider.generateRefreshToken({ userId, email });
+
       await User.findByIdAndUpdate(userId, {
         $set: { isVerified: true, refreshToken },
         $unset: { expireAt: "" },
@@ -108,17 +102,17 @@ export async function LoginUser(req: Request, res: Response) {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    const accessToken = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.AccessTokenSecret || "",
-      { expiresIn: "5m" }
-    );
+    const accessToken = JWTProvider.generateAccessToken({
+      userId: user._id as string,
+      email,
+      role: user.role,
+    });
 
-    const refreshToken = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.RefreshTokenSecret || "",
-      { expiresIn: "1d" }
-    );
+    const refreshToken = JWTProvider.generateRefreshToken({
+      userId: user._id as string,
+      email,
+      role: user.role,
+    });
 
     await User.findByIdAndUpdate(user._id, { $set: { refreshToken } });
 
@@ -182,78 +176,68 @@ export async function ResendOtp(req: Request, res: Response) {
 export async function googleAuth(req: Request, res: Response) {
   try {
     const { code } = req.body;
-    if (!code || typeof code !== "string")
-      return res.status(400).json({ error: "invalid code" });
+    console.log(code);
+    if (!code || typeof code !== "string") {
+      return res.status(400).json({ error: "invalid google access token" });
+    }
 
+    // 🔹 Fetch Google user info
     const resp = await fetch(
       `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${encodeURIComponent(
         code
       )}`
     );
-    if (!resp.ok) return res.status(502).json({ error: "google fetch failed" });
+
+    if (!resp.ok) {
+      return res.status(502).json({ error: "google fetch failed" });
+    }
 
     const data = await resp.json();
     const email = data.email;
     const name = data.name || data.given_name || "User";
-    if (!email) return res.status(400).json({ error: "no email from google" });
 
-    const user = await User.findOne({ email, role: "owner" });
-    const userId = user?._id;
+    if (!email) {
+      return res.status(400).json({ error: "no email from google" });
+    }
+
+    let user = await User.findOne({ email, role: "owner" });
 
     if (!user) {
-      const newUser = new User({
+      user = await User.create({
         name,
         email,
         role: "owner",
         isVerified: true,
       });
-      newUser.save();
-      const newUserId = newUser._id;
-      const accessToken = jwt.sign(
-        { newUserId, email },
-        process.env.AccessTokenSecret || "",
-        { expiresIn: "5m" }
-      );
-      const refreshToken = jwt.sign(
-        { newUserId, email },
-        process.env.RefreshTokenSecret || "",
-        { expiresIn: "1d" }
-      );
-
-      newUser.refreshToken = refreshToken;
-      await newUser.save();
-      return res.status(201).json({
-        user: { id: newUserId, name, email },
-        accessToken,
-        refreshToken,
-      });
     }
 
-    const accessToken = jwt.sign(
-      { userId, email },
-      process.env.AccessTokenSecret || "",
-      { expiresIn: "5m" }
-    );
-    const refreshToken = jwt.sign(
-      { userId, email },
-      process.env.RefreshTokenSecret || "",
-      { expiresIn: "1d" }
-    );
+    const accessToken = JWTProvider.generateAccessToken({
+      userId: user._id as string,
+      role: user.role,
+      email: email,
+    });
 
-    await User.findByIdAndUpdate(userId, { $set: { refreshToken } });
+    const refreshToken = JWTProvider.generateRefreshToken({
+      userId: user._id as string,
+      role: user.role as string,
+      email: user.email as string,
+    });
 
-    return res.status(200).json({
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    return res.status(user.isNew ? 201 : 200).json({
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
       },
-      refreshToken,
       accessToken,
+      refreshToken,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Google auth error:", err);
     return res.status(500).json({ error: "server error" });
   }
 }
@@ -285,7 +269,7 @@ export async function refreshAccessToken(req: Request, res: Response) {
 
         // 3️⃣ Generate new Access Token
         const accessToken = jwt.sign(
-          { userId, email },
+          { userId, email, name: user.name },
           process.env.AccessTokenSecret || "",
           { expiresIn: "5m" }
         );

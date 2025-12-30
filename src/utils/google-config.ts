@@ -1,10 +1,8 @@
-import { configDotenv } from "dotenv";
 import { google } from "googleapis";
-
-configDotenv();
 
 const googleClientId = process.env.GoogleClientId;
 const googleClientSecret = process.env.GoogleClientSecret;
+console.log("google client id", !process.env.GoogleClientId);
 
 console.log(googleClientId);
 console.log(googleClientSecret);
