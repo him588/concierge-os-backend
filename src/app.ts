@@ -10,6 +10,7 @@ import multer from "multer";
 import authRouter from "./routes/user.route";
 import { propertyRoute } from "./routes/property.routes";
 import { authenticateUser } from "./middlewares/authenticate-user";
+import { roomRoute } from "./routes/room.routes";
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use(limiter);
 /* Routes */
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/property", authenticateUser, propertyRoute);
+app.use("/api/v1/room", authenticateUser, roomRoute);
 
 /* 404 Handler */
 app.use((req: Request, res: Response) => {

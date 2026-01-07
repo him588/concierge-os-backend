@@ -1,7 +1,17 @@
 import { Schema, model, Document, Types } from "mongoose";
 
+export enum PropertyType {
+  Hotel = "Hotel",
+  Villa = "Villa",
+  Apartment = "Apartment",
+  Dorm = "Dorm",
+}
+
 export interface IProperty extends Document {
   name: string;
+  description?: string;
+  propertyType: PropertyType;
+  price?: number;
   tags: string[];
   location: {
     streetAddress: string;
@@ -27,6 +37,23 @@ const propertySchema = new Schema<IProperty>(
     name: {
       type: String,
       required: true,
+      trim: true,
+    },
+
+    description: {
+      type: String,
+      default: "",
+    },
+
+    propertyType: {
+      type: String,
+      enum: Object.values(PropertyType),
+      required: true,
+    },
+
+    price: {
+      type: Number,
+      min: 0,
     },
 
     tags: {

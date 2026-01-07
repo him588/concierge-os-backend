@@ -1,13 +1,6 @@
-export interface UserPayload {
-  userId: string;
-  email: string;
-  name: string;
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: UserPayload;
-    }
-  }
+export enum PropertyType {
+  Hotel = "Hotel",
+  Villa = "Villa",
+  Apartment = "Apartment",
+  Dorm = "Dorm",
 }

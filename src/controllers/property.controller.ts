@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/async-handler";
-import { propertyZodSchema } from "../validators/property.vaidator";
+import { propertyZodSchema } from "../validators/property.validator";
 import { Property } from "../models/property.model";
 
 async function registerProperty(req: Request, res: Response) {

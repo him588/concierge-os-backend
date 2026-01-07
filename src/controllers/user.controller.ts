@@ -5,7 +5,9 @@ import { generateOtp4 } from "../helper/helper";
 import { sendOtpEmail } from "../utils/send-email";
 import client from "../utils/redis-client";
 import jwt from "jsonwebtoken";
-import JWTProvider from "../common/jwt-provider";
+import JWTProvider from "../utils/jwt-provider";
+import { UserPayload } from "../types/express";
+import { asyncHandler } from "../utils/async-handler";
 
 export async function RegisterUser(req: Request, res: Response) {
   const { name, email, password } = req.body;
@@ -285,3 +287,11 @@ export async function refreshAccessToken(req: Request, res: Response) {
     return res.status(500).json({ message: "Internal server error" });
   }
 }
+
+async function userDetails(req: Request, res: Response) {
+  const { userId } = req.user as UserPayload;
+  const user = await User.findById(userId).select("-password");
+  return res.status(200).json({ user });
+}
+
+export const getUserDetails = asyncHandler(userDetails);
