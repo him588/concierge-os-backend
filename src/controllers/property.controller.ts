@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../utils/async-handler";
 import { propertyZodSchema } from "../validators/property.validator";
 import { Property } from "../models/property.model";
+import JWTProvider from "../utils/jwt-provider";
+import { User } from "../models/user.model";
 
 async function registerProperty(req: Request, res: Response) {
   if (!req.user?.userId) {
@@ -42,10 +44,35 @@ async function registerProperty(req: Request, res: Response) {
 
   const property = await Property.create(propertyData);
 
+  const populateProperty = await property.populate({
+    path: "ownedBy",
+    select: "_id name role email",
+  });
+
+  const ownedByUser = populateProperty.ownedBy as any;
+  const jwtPayload = {
+    userId: ownedByUser._id as string,
+    email: ownedByUser.email as string,
+    role: ownedByUser.role as string,
+    hotelId: populateProperty._id as string,
+  };
+
+  const accessToken = JWTProvider.generateAccessToken(jwtPayload);
+  const refreshToken = JWTProvider.generateRefreshToken(jwtPayload);
+
+  await User.updateOne(
+    { _id: ownedByUser._id },
+    { refreshToken: refreshToken }
+  );
+
+  console.log("jwt payload", jwtPayload);
+
   return res.status(201).json({
     success: true,
     message: "Property created successfully",
     data: property,
+    accessToken,
+    refreshToken,
   });
 }
 

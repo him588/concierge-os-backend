@@ -1,10 +1,5 @@
 import jwt, { JwtPayload, Secret, SignOptions } from "jsonwebtoken";
-
-interface GenerateTokenPayload {
-  userId: string;
-  role?: string;
-  email: string;
-}
+import { UserPayload } from "../types/express";
 
 class JWTProvider {
   private static ACCESS_SECRET = process.env.AccessTokenSecret!;
@@ -14,7 +9,7 @@ class JWTProvider {
   private static REFRESH_EXPIRES_IN = "7d" as const;
 
   // Generate Access Token
-  static generateAccessToken(payload: GenerateTokenPayload): string {
+  static generateAccessToken(payload: UserPayload): string {
     const options: SignOptions = {
       expiresIn: this.ACCESS_EXPIRES_IN,
     };
@@ -22,7 +17,7 @@ class JWTProvider {
   }
 
   //  Generate Refresh Token
-  static generateRefreshToken(payload: GenerateTokenPayload): string {
+  static generateRefreshToken(payload: UserPayload): string {
     const options: SignOptions = {
       expiresIn: this.REFRESH_EXPIRES_IN,
     };

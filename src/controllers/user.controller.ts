@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import JWTProvider from "../utils/jwt-provider";
 import { UserPayload } from "../types/express";
 import { asyncHandler } from "../utils/async-handler";
+import { Property } from "../models/property.model";
 
 export async function RegisterUser(req: Request, res: Response) {
   const { name, email, password } = req.body;
@@ -213,16 +214,23 @@ export async function googleAuth(req: Request, res: Response) {
       });
     }
 
+    console.log(user);
+    const property = await Property.findOne({ ownedBy: user._id });
+
+    console.log("property", property);
+
     const accessToken = JWTProvider.generateAccessToken({
       userId: user._id as string,
       role: user.role,
       email: email,
+      hotelId: property ? (property._id as string) : null,
     });
 
     const refreshToken = JWTProvider.generateRefreshToken({
       userId: user._id as string,
       role: user.role as string,
       email: user.email as string,
+      hotelId: property ? (property._id as string) : null,
     });
 
     user.refreshToken = refreshToken;
@@ -234,6 +242,7 @@ export async function googleAuth(req: Request, res: Response) {
         name: user.name,
         email: user.email,
         role: user.role,
+        hotelId: property ? (property._id as string) : null,
       },
       accessToken,
       refreshToken,
@@ -261,20 +270,25 @@ export async function refreshAccessToken(req: Request, res: Response) {
           return res.status(401).json({ message: "Invalid refresh token" });
         }
 
-        const { userId, email } = decoded;
+        const { userId, email, role } = decoded;
 
         // 2️⃣ Check DB if this refresh token matches
         const user = await User.findById(userId);
+
         if (!user || user.refreshToken !== refreshToken) {
           return res.status(403).json({ message: "Token mismatch" });
         }
+        const property = await Property.findOne({ ownedBy: user._id });
 
         // 3️⃣ Generate new Access Token
-        const accessToken = jwt.sign(
-          { userId, email, name: user.name },
-          process.env.AccessTokenSecret || "",
-          { expiresIn: "5m" }
-        );
+        const jwtPayload = {
+          userId: user._id as string,
+          role: user.role,
+          email: user.email as string,
+          hotelId: property ? (property._id as string) : null,
+        };
+
+        const accessToken = JWTProvider.generateAccessToken(jwtPayload);
 
         return res.status(200).json({
           message: "Token refreshed successfully",
@@ -291,7 +305,15 @@ export async function refreshAccessToken(req: Request, res: Response) {
 async function userDetails(req: Request, res: Response) {
   const { userId } = req.user as UserPayload;
   const user = await User.findById(userId).select("-password");
-  return res.status(200).json({ user });
+  const property = await Property.findOne({ ownedBy: userId });
+  const userDetails = {
+    name: user?.name,
+    email: user?.email,
+    role: user?.role,
+    userId: user?._id,
+    hotelId: property ? property?._id : null,
+  };
+  return res.status(200).json({ user: userDetails });
 }
 
 export const getUserDetails = asyncHandler(userDetails);

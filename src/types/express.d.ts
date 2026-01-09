@@ -1,8 +1,8 @@
 export interface UserPayload {
   userId: string;
+  role?: string;
   email: string;
-  name: string;
-  hotelId?: string;
+  hotelId?: string | null;
 }
 
 declare global {

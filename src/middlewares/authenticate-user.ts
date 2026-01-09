@@ -21,11 +21,11 @@ export async function authenticateUser(
       const property = await Property.findOne({ ownedBy: userDetails.userId });
 
       if (!userDetails) return;
-      const { userId, email, name } = userDetails;
+      const { userId, email, role } = userDetails;
       req.user = {
         userId,
         email,
-        name,
+        role,
         hotelId: property?._id?.toString(),
       };
       next();
