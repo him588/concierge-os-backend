@@ -10,6 +10,8 @@ async function createRoomType(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
   const roomtype = { ...req.body, hotelId };
 
+  console.log("create room api called");
+
   try {
     roomTypeZodSchema.parse(roomtype);
 
@@ -42,6 +44,7 @@ async function createRoomType(req: Request, res: Response) {
       roomType: saveRoomType,
     });
   } catch (error) {
+    console.log(error);
     if (error instanceof ZodError) {
       const parseError = JSON.parse(error.message);
       return res.status(400).json({

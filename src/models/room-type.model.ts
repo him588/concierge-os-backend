@@ -44,4 +44,6 @@ const roomTypeSchema = new Schema<IRoomType>(
   }
 );
 
+roomTypeSchema.index({ hotelId: 1, type: 1 }, { unique: true });
+
 export const RoomType = model<IRoomType>("RoomType", roomTypeSchema);

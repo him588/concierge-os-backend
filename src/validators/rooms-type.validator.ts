@@ -7,4 +7,5 @@ export const roomTypeZodSchema = z.object({
   price: z.number().positive("Price must be greater than 0"),
   maxGuest: z.number().positive().min(1, "At least one guest required"),
   image: z.string(),
+  isShared: z.boolean(),
 });
