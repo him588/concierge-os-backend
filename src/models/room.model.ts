@@ -5,6 +5,7 @@ export interface IRoom extends Document {
   hotelId: mongoose.Types.ObjectId;
   roomNumber: string;
   isAvailable: boolean;
+  floor: string;
   status: "available" | "booked" | "maintenance";
   createdAt: Date;
   updatedAt: Date;
@@ -23,6 +24,10 @@ const roomSchema = new Schema<IRoom>(
       required: true,
     },
     roomNumber: {
+      type: String,
+      required: true,
+    },
+    floor: {
       type: String,
       required: true,
     },

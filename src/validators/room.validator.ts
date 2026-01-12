@@ -7,8 +7,7 @@ export const roomZodSchema = z.object({
     .string()
     .min(1, "Room number is required")
     .max(10, "Room number is too long"),
-
+  floor: z.string(),
   isAvailable: z.boolean().optional(),
-
   status: z.enum(["available", "booked", "maintenance"]).optional(),
 });

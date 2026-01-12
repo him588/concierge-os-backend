@@ -7,6 +7,7 @@ export interface IRoomType extends Document {
   price: number;
   maxGuest: number;
   image: string;
+  isShared: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +37,10 @@ const roomTypeSchema = new Schema<IRoomType>(
     },
     image: {
       type: String,
+      required: true,
+    },
+    isShared: {
+      type: Boolean,
       required: true,
     },
   },

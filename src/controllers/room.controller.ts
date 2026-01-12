@@ -25,7 +25,7 @@ async function createRoomType(req: Request, res: Response) {
     if (roomTypeInfo > 0) {
       return res.status(400).json({
         success: false,
-        message: "Duplicate entry are not allowed for same hotel",
+        message: "Duplicate room type are not allowed for same hotel",
       });
     }
 
@@ -58,9 +58,11 @@ async function createRoomType(req: Request, res: Response) {
 async function getRoomType(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
 
-  const roomTypes = await RoomType.find({ hotelId }).sort({
-    createdAt: -1,
-  });
+  const roomTypes = await RoomType.find({ hotelId })
+    .sort({
+      createdAt: -1,
+    })
+    .select("-createdAt -updatedAt -__v -hotelId");
 
   return res.status(200).json({
     success: true,
@@ -69,12 +71,31 @@ async function getRoomType(req: Request, res: Response) {
   });
 }
 
-async function createRoom(req: Request, res: Response) {
-  const hotelId = req.user?.hotelId;
-  const roomData = { ...req.body, hotelId };
-
+export async function createRoom(req: Request, res: Response) {
   try {
+    const hotelId = req.user?.hotelId;
+
+    if (!hotelId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    // multer-s3 files
+    const files = req.files as Express.MulterS3.File[];
+
+    const imageUrls = files?.map((file) => file.location) || [];
+
+    const roomData = {
+      ...req.body,
+      roomTypeId: req.body.categoryId,
+      hotelId,
+      images: imageUrls,
+      isAvailable: req.body.isAvailable === "true", // string → boolean
+    };
+
+    // Zod validation
     roomZodSchema.parse(roomData);
+
+    // Duplicate check
     const duplicateRoom = await Room.countDocuments({
       hotelId,
       roomNumber: roomData.roomNumber,
@@ -83,10 +104,11 @@ async function createRoom(req: Request, res: Response) {
     if (duplicateRoom > 0) {
       return res.status(400).json({
         success: false,
-        message: "Room number already exists for this hotel",
+        message: "Room number already exists ",
       });
     }
 
+    // Save to DB
     const savedRoom = await Room.create(roomData);
 
     return res.status(201).json({
@@ -95,13 +117,21 @@ async function createRoom(req: Request, res: Response) {
       room: savedRoom,
     });
   } catch (error) {
+    console.error(error);
+
     if (error instanceof ZodError) {
       const parseError = JSON.parse(error.message);
+      console.log("parse error", parseError);
       return res.status(400).json({
         success: false,
         message: parseError[0].message,
       });
     }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create room",
+    });
   }
 }
 
