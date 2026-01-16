@@ -76,4 +76,32 @@ async function registerProperty(req: Request, res: Response) {
   });
 }
 
+async function getProperty(req: Request, res: Response) {
+  const { hotelId } = req.query;
+  console.log("req recieved", hotelId);
+
+  if (!hotelId) {
+    return res.status(400).json({
+      status: false,
+      message: "Hotel id is reqiured to fetch user details",
+    });
+  }
+
+  const property = await Property.findOne({ _id: hotelId }).select(
+    "name  ownedBy"
+  );
+  console.log(property);
+  return res.status(200).json({
+    status: false,
+    message: "property details fetched successfully",
+    property,
+  });
+  // return res.status(200).json({
+  //   status: true,
+  //   message: "user details fetched success fully",
+  //   property,
+  // });
+}
+
 export const registerUserHandler = asyncHandler(registerProperty);
+export const getPropertyHandler = asyncHandler(getProperty);

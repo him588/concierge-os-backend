@@ -7,6 +7,7 @@ export interface IRoom extends Document {
   isAvailable: boolean;
   floor: string;
   status: "available" | "booked" | "maintenance";
+  images: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,10 +32,7 @@ const roomSchema = new Schema<IRoom>(
       type: String,
       required: true,
     },
-    isAvailable: {
-      type: Boolean,
-      default: true,
-    },
+    images: [String],
     status: {
       type: String,
       enum: ["available", "booked", "maintenance"],

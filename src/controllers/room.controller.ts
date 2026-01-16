@@ -71,7 +71,7 @@ async function getRoomType(req: Request, res: Response) {
   });
 }
 
-export async function createRoom(req: Request, res: Response) {
+async function createRoom(req: Request, res: Response) {
   try {
     const hotelId = req.user?.hotelId;
 
@@ -137,15 +137,28 @@ export async function createRoom(req: Request, res: Response) {
 
 async function getRooms(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
+  const { id } = req.query;
 
   const rooms = await Room.find({ hotelId })
-    .populate("roomTypeId")
-    .sort({ createdAt: -1 });
+    .select("roomNumber floor images status _id")
+    .populate({ path: "roomTypeId", select: "type maxGuest" })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const response = rooms.map((room: any) => ({
+    id: room._id.toString(),
+    roomNumber: room.roomNumber,
+    category: room.roomTypeId?.type ?? "",
+    floor: room.floor,
+    images: room.images ?? [],
+    maxGuest: room.roomTypeId?.maxGuest ?? 0,
+    status: room.status,
+  }));
 
   return res.status(200).json({
     success: true,
     message: "Room list fetched successfully",
-    rooms,
+    rooms: response,
   });
 }
 
