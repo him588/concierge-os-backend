@@ -11,6 +11,12 @@ import authRouter from "./routes/user.route";
 import { propertyRoute } from "./routes/property.routes";
 import { authenticateUser } from "./middlewares/authenticate-user";
 import { roomRoute } from "./routes/room.routes";
+import { serviceRoute } from "./routes/service.routes";
+import { serviceItemRoute } from "./routes/service-item.routes";
+import { staffRoute } from "./routes/staff.routes";
+import { staffServiceMappingRoute } from "./routes/staff-service-mapping.routes";
+import { bookingRoute } from "./routes/booking.routes";
+import { roomBookingRoute } from "./routes/room-booking.routes";
 
 const app = express();
 
@@ -43,6 +49,14 @@ app.use(limiter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/property", propertyRoute);
 app.use("/api/v1/room", authenticateUser, roomRoute);
+
+// Dynamic Services & Staff Management Routes
+app.use("/api/v1/services", serviceRoute);
+app.use("/api/v1/service-items", serviceItemRoute);
+app.use("/api/v1/staff", staffRoute);
+app.use("/api/v1/staff-service-mappings", staffServiceMappingRoute);
+app.use("/api/v1/bookings", bookingRoute);
+app.use("/api/v1/room-bookings", roomBookingRoute);
 
 /* 404 Handler */
 app.use((req: Request, res: Response) => {

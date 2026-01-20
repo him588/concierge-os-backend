@@ -43,7 +43,7 @@ export async function RegisterUser(req: Request, res: Response) {
     otp[1],
     otp[2],
     otp[3],
-    "5"
+    "5",
   );
   return res
     .status(201)
@@ -164,7 +164,7 @@ export async function ResendOtp(req: Request, res: Response) {
       otp[1],
       otp[2],
       otp[3],
-      "5"
+      "5",
     );
 
     return res.status(200).json({
@@ -187,8 +187,8 @@ export async function googleAuth(req: Request, res: Response) {
     // 🔹 Fetch Google user info
     const resp = await fetch(
       `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${encodeURIComponent(
-        code
-      )}`
+        code,
+      )}`,
     );
 
     if (!resp.ok) {
@@ -256,7 +256,7 @@ export async function googleAuth(req: Request, res: Response) {
 export async function refreshAccessToken(req: Request, res: Response) {
   try {
     const { refreshToken } = req.body;
-
+    console.log(refreshToken);
     if (!refreshToken) {
       return res.status(400).json({ message: "Refresh token is required" });
     }
@@ -294,7 +294,7 @@ export async function refreshAccessToken(req: Request, res: Response) {
           message: "Token refreshed successfully",
           accessToken,
         });
-      }
+      },
     );
   } catch (error) {
     console.error("Refresh token error:", error);
