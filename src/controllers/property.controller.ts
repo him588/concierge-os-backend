@@ -62,7 +62,7 @@ async function registerProperty(req: Request, res: Response) {
 
   await User.updateOne(
     { _id: ownedByUser._id },
-    { refreshToken: refreshToken }
+    { refreshToken: refreshToken },
   );
 
   console.log("jwt payload", jwtPayload);
@@ -77,22 +77,22 @@ async function registerProperty(req: Request, res: Response) {
 }
 
 async function getProperty(req: Request, res: Response) {
-  const { hotelId } = req.query;
-  console.log("req recieved", hotelId);
+  // console.log(req);
+  const { id } = req.params;
 
-  if (!hotelId) {
+  console.log("req recieved", id);
+
+  if (!id) {
     return res.status(400).json({
       status: false,
       message: "Hotel id is reqiured to fetch user details",
     });
   }
 
-  const property = await Property.findOne({ _id: hotelId }).select(
-    "name  ownedBy"
-  );
+  const property = await Property.findOne({ _id: id }).select("name  ownedBy");
   console.log(property);
   return res.status(200).json({
-    status: false,
+    status: true,
     message: "property details fetched successfully",
     property,
   });

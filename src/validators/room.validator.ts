@@ -9,5 +9,5 @@ export const roomZodSchema = z.object({
     .max(10, "Room number is too long"),
   floor: z.string(),
   images: z.array(z.url()),
-  status: z.enum(["available", "booked", "maintenance"]).optional(),
+  status: z.enum(["available", "maintenance"]),
 });

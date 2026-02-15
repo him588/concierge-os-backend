@@ -1,14 +1,16 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/async-handler";
 import { Service } from "../models/service.model";
+import { Staff } from "../models/staff.model";
 import {
   createServiceSchema,
   updateServiceSchema,
 } from "../validators/service.validator";
-import { ZodError } from "zod";
 
 async function createService(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
+
+
 
   if (!hotelId) {
     return res.status(401).json({
@@ -34,6 +36,18 @@ async function createService(req: Request, res: Response) {
     return res.status(409).json({
       success: false,
       message: "Service with this name already exists for this hotel",
+    });
+  }
+
+  const isStaffAvailable = await Staff.findOne({
+    hotelId,
+    isAvailable: true,
+  });
+
+  if (!isStaffAvailable) {
+    return res.status(400).json({
+      success: false,
+      message: "No staff is available to create a service",
     });
   }
 

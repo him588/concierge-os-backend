@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   fetchRoom,
+  fetchRoomStatus,
   fetchRoomType,
   listRoom,
   registerRoomType,
@@ -16,6 +17,7 @@ roomRoute.post(
   "/create-room",
   isHotelOwner,
   upload.array("images", 6),
-  listRoom
+  listRoom,
 );
 roomRoute.get("/get-rooms", fetchRoom);
+roomRoute.get("/get-room-status", fetchRoomStatus);

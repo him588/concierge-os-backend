@@ -5,6 +5,7 @@ import { roomTypeZodSchema } from "../validators/rooms-type.validator";
 import { roomZodSchema } from "../validators/room.validator";
 import { RoomType } from "../models/room-type.model";
 import { Room } from "../models/room.model";
+import { RoomBooking } from "../models/room-booking.model";
 
 async function createRoomType(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
@@ -162,7 +163,77 @@ async function getRooms(req: Request, res: Response) {
   });
 }
 
+async function getRoomStatus(req: Request, res: Response) {
+  const hotelId = req.user?.hotelId;
+  if (!hotelId) {
+    res.status(401).json({ message: "Unauthorized", status: false });
+  }
+  const rooms = await Room.find({ hotelId }).populate("roomTypeId").lean();
+  const roomBooking = await RoomBooking.find({
+    hotelId,
+    checkOut: { $gte: new Date() },
+  });
+
+  const allRooms = rooms.map((room: any) => {
+    const booking = roomBooking.find(
+      (b: any) => b.roomId.toString() === room._id.toString(),
+    );
+
+    if (room.status === "maintenance") {
+      return {
+        roomNo: room.roomNumber,
+        roomType: room.roomTypeId?.type,
+        status: "maintenance",
+        roomId: room._id,
+      };
+    }
+
+    if (booking) {
+      const checkIn = new Date(booking.checkIn);
+      const checkOut = new Date(booking.checkOut);
+      const now = new Date();
+
+      if (now >= checkIn && now <= checkOut) {
+        return {
+          roomNo: room.roomNumber,
+          roomType: room.roomTypeId?.type,
+          status: "occupied",
+          roomId: room._id,
+          daysRemaining: Math.ceil(
+            (checkOut.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          ),
+        };
+      } else if (checkIn > now) {
+        return {
+          roomNo: room.roomNumber,
+          roomType: room.roomTypeId?.type,
+          status: "upcoming",
+          roomId: room._id,
+          daysUntilCheckIn: Math.ceil(
+            (checkIn.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          ),
+        };
+      }
+    }
+
+    return {
+      roomNo: room.roomNumber,
+      roomType: room.roomTypeId?.type,
+      status: "available",
+      roomId: room._id,
+    };
+  });
+
+  console.log(allRooms);
+  return res.status(200).json({
+    success: true,
+    message: "Room status fetched successfully",
+    rooms: allRooms.sort((a, b) => a.roomNo - b.roomNo),
+  });
+}
+
 export const registerRoomType = asyncHandler(createRoomType);
 export const fetchRoomType = asyncHandler(getRoomType);
 export const listRoom = asyncHandler(createRoom);
 export const fetchRoom = asyncHandler(getRooms);
+export const fetchRoomStatus = asyncHandler(getRoomStatus);

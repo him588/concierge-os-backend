@@ -15,7 +15,7 @@ async function isRoomAvailable(
   roomId: string,
   checkIn: Date,
   checkOut: Date,
-  excludeBookingId?: string
+  excludeBookingId?: string,
 ): Promise<boolean> {
   const filter: any = {
     roomId,
@@ -93,7 +93,7 @@ async function createRoomBooking(req: Request, res: Response) {
   const available = await isRoomAvailable(
     bookingData.roomId,
     checkIn,
-    checkOut
+    checkOut,
   );
 
   if (!available) {
@@ -137,8 +137,9 @@ async function createRoomBooking(req: Request, res: Response) {
 
 async function getRoomBookings(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
-  const { status, guestId, roomId, checkIn, checkOut } = req.query;
-
+  console.log(req.user);
+  const { filter } = req.query;
+  console.log(hotelId);
   if (!hotelId) {
     return res.status(401).json({
       success: false,
@@ -146,32 +147,40 @@ async function getRoomBookings(req: Request, res: Response) {
     });
   }
 
-  const filter: any = { hotelId };
+  const now = new Date();
 
-  if (status) {
-    filter.status = status;
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const query: any = { hotelId };
+
+  switch (filter) {
+    case "today":
+      query.checkIn = { $lte: now };
+      query.checkOut = { $gte: now };
+      break;
+
+    case "upcoming":
+      query.checkIn = { $gt: now };
+      break;
+
+    case "past":
+      query.checkOut = { $lt: now };
+      break;
+
+    case "checkinToday":
+      query.checkIn = { $gte: startOfDay, $lte: endOfDay };
+      break;
+
+    case "checkoutToday":
+      query.checkOut = { $gte: startOfDay, $lte: endOfDay };
+      break;
   }
 
-  if (guestId) {
-    filter.guestId = guestId;
-  }
-
-  if (roomId) {
-    filter.roomId = roomId;
-  }
-
-  // Date range filter
-  if (checkIn || checkOut) {
-    filter.$or = [];
-    if (checkIn) {
-      filter.$or.push({ checkOut: { $gte: new Date(checkIn as string) } });
-    }
-    if (checkOut) {
-      filter.$or.push({ checkIn: { $lte: new Date(checkOut as string) } });
-    }
-  }
-
-  const bookings = await RoomBooking.find(filter)
+  const bookings = await RoomBooking.find(query)
     .populate({ path: "roomId", select: "roomNumber floor images" })
     .populate({ path: "roomTypeId", select: "type maxGuest price" })
     .populate({ path: "guestId", select: "name email" })
@@ -242,7 +251,7 @@ async function updateRoomBooking(req: Request, res: Response) {
         existingBooking.roomId.toString(),
         typeof checkIn === "string" ? new Date(checkIn) : checkIn,
         typeof checkOut === "string" ? new Date(checkOut) : checkOut,
-        id
+        id,
       );
 
       if (!available) {
@@ -256,7 +265,11 @@ async function updateRoomBooking(req: Request, res: Response) {
 
   // Recalculate if dates or status changed
   const finalUpdateData: any = { ...updateData };
-  if (finalUpdateData.checkIn || finalUpdateData.checkOut || finalUpdateData.status === RoomBookingStatus.CHECKED_OUT) {
+  if (
+    finalUpdateData.checkIn ||
+    finalUpdateData.checkOut ||
+    finalUpdateData.status === RoomBookingStatus.CHECKED_OUT
+  ) {
     // Recalculate will happen in pre-save hook
     // But we need to fetch room type price for recalculation
     const existingBooking = await RoomBooking.findById(id);
@@ -271,7 +284,10 @@ async function updateRoomBooking(req: Request, res: Response) {
   }
 
   // If status is changed to checked_out or cancelled, make room available again
-  if (updateData.status === RoomBookingStatus.CHECKED_OUT || updateData.status === RoomBookingStatus.CANCELLED) {
+  if (
+    updateData.status === RoomBookingStatus.CHECKED_OUT ||
+    updateData.status === RoomBookingStatus.CANCELLED
+  ) {
     const existingBooking = await RoomBooking.findById(id);
     if (existingBooking) {
       await Room.findByIdAndUpdate(existingBooking.roomId, {
@@ -288,7 +304,7 @@ async function updateRoomBooking(req: Request, res: Response) {
   const booking = await RoomBooking.findOneAndUpdate(
     { _id: id, hotelId },
     { $set: finalUpdateData },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   )
     .populate({ path: "roomId", select: "roomNumber floor images" })
     .populate({ path: "roomTypeId", select: "type maxGuest price" })
@@ -322,7 +338,7 @@ async function cancelRoomBooking(req: Request, res: Response) {
   const booking = await RoomBooking.findOneAndUpdate(
     { _id: id, hotelId },
     { $set: { status: RoomBookingStatus.CANCELLED } },
-    { new: true }
+    { new: true },
   );
 
   if (!booking) {

@@ -91,7 +91,7 @@ const roomBookingSchema = new Schema<IRoomBooking>(
       type: String,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Pre-save hook to calculate totalNights and totalAmount
@@ -111,4 +111,7 @@ roomBookingSchema.index({ guestId: 1, status: 1 });
 roomBookingSchema.index({ roomId: 1, checkIn: 1, checkOut: 1 });
 roomBookingSchema.index({ checkIn: 1, checkOut: 1 });
 
-export const RoomBooking = model<IRoomBooking>("RoomBooking", roomBookingSchema);
+export const RoomBooking = model<IRoomBooking>(
+  "RoomBooking",
+  roomBookingSchema,
+);

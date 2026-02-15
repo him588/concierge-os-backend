@@ -12,9 +12,9 @@ propertyRoute.post(
   "/register-property",
   authenticateUser,
   upload.array("images", 5),
-  registerUserHandler
+  registerUserHandler,
 );
-propertyRoute.get("/property-details", getPropertyHandler);
+propertyRoute.get("/property-details/:id", getPropertyHandler);
 propertyRoute.get("/properties", () => {});
 propertyRoute.post("/update-property", () => {});
 propertyRoute.delete("/delete", () => {});
