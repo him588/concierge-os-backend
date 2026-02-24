@@ -38,6 +38,8 @@ async function registerProperty(req: Request, res: Response) {
     ownedBy: req.user.userId,
   };
 
+  console.log(propertyData);
+
   console.log("property data", propertyData);
 
   propertyZodSchema.parse(propertyData);

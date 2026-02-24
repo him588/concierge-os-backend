@@ -6,6 +6,7 @@ export interface IService extends Document {
   color: string;
   hotelId: Types.ObjectId; // Multiple hotels can have same service names
   isActive: boolean; // Soft delete/disable flag
+  isPaid: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +36,10 @@ const serviceSchema = new Schema<IService>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    isPaid: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true },

@@ -168,7 +168,7 @@ async function updateServiceItem(req: Request, res: Response) {
   const item = await ServiceItem.findOneAndUpdate(
     { _id: id, hotelId },
     { $set: updateData },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   );
 
   if (!item) {
@@ -200,7 +200,7 @@ async function deleteServiceItem(req: Request, res: Response) {
   const item = await ServiceItem.findOneAndUpdate(
     { _id: id, hotelId },
     { $set: { isAvailable: false } },
-    { new: true }
+    { new: true },
   );
 
   if (!item) {

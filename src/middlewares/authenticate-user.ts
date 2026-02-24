@@ -6,7 +6,7 @@ import { Property } from "../models/property.model";
 export async function authenticateUser(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) {
   const { headers } = req;
   console.log(headers);
@@ -15,7 +15,7 @@ export async function authenticateUser(
   if (token?.includes("Bearer")) {
     try {
       const userDetails = JWTProvider.verifyAccessToken(
-        token.split(" ")[1]
+        token.split(" ")[1],
       ) as UserPayload;
 
       const property = await Property.findOne({ ownedBy: userDetails.userId });

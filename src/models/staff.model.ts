@@ -7,7 +7,7 @@ export interface IStaff extends Document {
   hotelId: Types.ObjectId;
   isAvailable: boolean; // Simple availability flag
   isActive: boolean; // Soft delete/disable flag
-  // Note: No role field - roles are derived from service mappings
+  password: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +28,11 @@ const staffSchema = new Schema<IStaff>(
       type: String,
       sparse: true,
     },
+    password: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     hotelId: {
       type: Schema.Types.ObjectId,
       ref: "Property",
@@ -43,7 +48,7 @@ const staffSchema = new Schema<IStaff>(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Index for quick availability queries

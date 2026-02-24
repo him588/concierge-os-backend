@@ -6,14 +6,28 @@ import {
   createStaffSchema,
   updateStaffSchema,
 } from "../validators/staff.validator";
+import { User } from "../models/user.model";
 
 async function createStaff(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
+  const { email } = req.body;
 
   if (!hotelId) {
     return res.status(401).json({
       success: false,
       message: "Hotel ID is required",
+    });
+  }
+
+  const [userExist, staffExist] = await Promise.all([
+    User.findOne({ email }),
+    Staff.findOne({ email }),
+  ]);
+
+  if (userExist || staffExist) {
+    return res.status(400).json({
+      status: false,
+      message: "Email id already exists",
     });
   }
 

@@ -7,6 +7,7 @@ export const createServiceSchema = z.object({
   color: z.string(),
   hotelId: objectIdSchema,
   isActive: z.boolean().default(true),
+  isPaid:z.boolean().default(true)
 });
 
 export const updateServiceSchema = z.object({

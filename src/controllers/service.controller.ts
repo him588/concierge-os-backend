@@ -10,8 +10,6 @@ import {
 async function createService(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
 
-
-
   if (!hotelId) {
     return res.status(401).json({
       success: false,
@@ -63,6 +61,8 @@ async function createService(req: Request, res: Response) {
 async function getServices(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
 
+  console.log(hotelId);
+
   if (!hotelId) {
     return res.status(401).json({
       success: false,
@@ -80,6 +80,8 @@ async function getServices(req: Request, res: Response) {
   const services = await Service.find(filter)
     .sort({ createdAt: -1 })
     .select("-__v");
+
+  console.log(services);
 
   return res.status(200).json({
     success: true,

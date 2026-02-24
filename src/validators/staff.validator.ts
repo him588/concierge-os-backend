@@ -7,6 +7,7 @@ export const createStaffSchema = z.object({
   phone: z.string().optional(),
   hotelId: objectIdSchema,
   isAvailable: z.boolean().default(true),
+  password: z.string().min(6, "Atleast 6 cahr is required for password").trim(),
 });
 
 export const updateStaffSchema = z.object({

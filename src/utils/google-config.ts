@@ -10,5 +10,5 @@ console.log(googleClientSecret);
 export const oauthClient = new google.auth.OAuth2(
   googleClientId,
   googleClientSecret,
-  "postmessages"
+  "postmessages",
 );
