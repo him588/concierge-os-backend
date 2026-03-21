@@ -8,12 +8,7 @@ import { upload } from "../middlewares/upload-file";
 
 export const propertyRoute = express.Router();
 
-propertyRoute.post(
-  "/register-property",
-  authenticateUser,
-  upload.array("images", 5),
-  registerUserHandler,
-);
+propertyRoute.post("/register-property", authenticateUser, registerUserHandler);
 propertyRoute.get("/property-details/:id", getPropertyHandler);
 propertyRoute.get("/properties", () => {});
 propertyRoute.post("/update-property", () => {});

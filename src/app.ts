@@ -17,6 +17,7 @@ import { staffRoute } from "./routes/staff.routes";
 import { staffServiceMappingRoute } from "./routes/staff-service-mapping.routes";
 import { bookingRoute } from "./routes/booking.routes";
 import { roomBookingRoute } from "./routes/room-booking.routes";
+import { overviewRoute } from "./routes/overview.routes";
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/v1/staff", staffRoute);
 app.use("/api/v1/staff-service-mappings", staffServiceMappingRoute);
 app.use("/api/v1/bookings", bookingRoute);
 app.use("/api/v1/room-bookings", roomBookingRoute);
+app.use("/api/v1/overview", overviewRoute);
 
 /* 404 Handler */
 app.use((req: Request, res: Response) => {

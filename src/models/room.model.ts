@@ -5,7 +5,7 @@ export interface IRoom extends Document {
   hotelId: mongoose.Types.ObjectId;
   roomNumber: string;
   floor: string;
-  status: "available" | "booked" | "maintenance";
+  status: "available" | "maintenance";
   images: string[];
   createdAt: Date;
   updatedAt: Date;

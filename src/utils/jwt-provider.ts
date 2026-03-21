@@ -29,6 +29,17 @@ class JWTProvider {
     return jwt.verify(token, this.ACCESS_SECRET) as JwtPayload;
   }
 
+  static isTokenExpired(token: string): boolean {
+    const decodedToken = jwt.decode(token);
+    if (!decodedToken || typeof decodedToken === "string") return false;
+
+    if (decodedToken.exp && Date.now() > decodedToken.exp * 1000) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   //  Verify Refresh Token
   static verifyRefreshToken(token: string): JwtPayload {
     return jwt.verify(token, this.REFRESH_SECRET) as JwtPayload;

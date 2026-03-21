@@ -37,10 +37,6 @@ const serviceSchema = new Schema<IService>(
       type: Boolean,
       default: true,
     },
-    isPaid: {
-      type: Boolean,
-      default: false,
-    },
   },
   { timestamps: true },
 );

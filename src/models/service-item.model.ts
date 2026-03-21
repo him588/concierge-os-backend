@@ -55,7 +55,7 @@ const serviceItemSchema = new Schema<IServiceItem>(
       index: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Pre-save hook to compute isFree from price
@@ -69,4 +69,7 @@ serviceItemSchema.index({ serviceId: 1, name: 1 }, { unique: true });
 // Index for quick hotel queries
 serviceItemSchema.index({ hotelId: 1, isAvailable: 1 });
 
-export const ServiceItem = model<IServiceItem>("ServiceItem", serviceItemSchema);
+export const ServiceItem = model<IServiceItem>(
+  "ServiceItem",
+  serviceItemSchema,
+);

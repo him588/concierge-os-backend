@@ -18,19 +18,23 @@ export async function RegisterUser(req: Request, res: Response) {
   }
   const isUserExist = await User.findOne({ email, role: "owner" });
   if (isUserExist) {
-    return res
-      .status(409)
-      .json({ message: "User already exist for this email" });
+    return res.status(409).json({
+      message: isUserExist.isVerified
+        ? "User already exist for this email"
+        : "Verify the user for this email",
+    });
   }
   const passwordHash = await bcrypt.hash(password, 10);
-  const newUser = new User({ name, email, passwordHash, role: "owner" });
-  await newUser.save();
   const otp = generateOtp4();
 
-  await client.set(`OTP${newUser._id}`, otp, {
-    NX: true,
-    EX: 300,
-  });
+  const newUser = new User({ name, email, passwordHash, role: "owner", otp });
+  await newUser.save();
+  const userRes = {
+    name: newUser.name,
+    email: newUser.email,
+    role: newUser.role,
+    userId: newUser._id,
+  };
 
   sendOtpEmail(
     "../templates",
@@ -47,30 +51,47 @@ export async function RegisterUser(req: Request, res: Response) {
   );
   return res
     .status(201)
-    .json({ message: "user created successfully", otp, newUser });
+    .json({ message: "user created successfully", otp, user: userRes });
 }
 
 export async function VerifyUser(req: Request, res: Response) {
-  const { userId, otp, email } = req.body;
-  console.log("all the otp", userId, otp, email);
+  const { userId, otp } = req.body;
+  if (!userId || !otp) {
+    return res.status(400).json({
+      status: false,
+      message: "UserId and Otp is required for verify user",
+    });
+  }
   const isExist = await User.findById(userId);
-  const dbOtp = await client.get(`OTP${userId}`);
-  console.log("otp from db", dbOtp);
-  if (!dbOtp) {
+  if (!isExist?.otp) {
     return res.status(409).json({ message: "something went wrong" });
   }
   if (isExist) {
-    if (dbOtp === otp) {
-      const accessToken = JWTProvider.generateAccessToken({ userId, email });
-      const refreshToken = JWTProvider.generateRefreshToken({ userId, email });
+    if (isExist.otp === +otp) {
+      const accessToken = JWTProvider.generateAccessToken({
+        userId,
+        email: isExist.email!,
+        hotelId: isExist.hotelId ? isExist.hotelId.toString() : "",
+      });
+      const refreshToken = JWTProvider.generateRefreshToken({
+        userId,
+        email: isExist.email!,
+        hotelId: isExist.hotelId ? isExist.hotelId.toString() : "",
+      });
 
       await User.findByIdAndUpdate(userId, {
         $set: { isVerified: true, refreshToken },
-        $unset: { expireAt: "" },
+        $unset: { expireAt: "", otp: "" },
       });
-      await client.del(`OTP${userId}`);
 
-      return res.status(200).json({ accessToken, refreshToken });
+      res.cookie("refreshToken", refreshToken, {
+        secure: false,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        sameSite: true,
+      });
+
+      return res.status(200).json({ accessToken });
     } else {
       return res.status(403).json({ message: "Wrong otp" });
     }
@@ -102,26 +123,33 @@ export async function LoginUser(req: Request, res: Response) {
 
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: "Invalid password" });
+      return res.status(401).json({ message: "Invalid Email or Password" });
     }
 
-    const accessToken = JWTProvider.generateAccessToken({
-      userId: user._id as string,
-      email,
-      role: user.role,
-    });
+    const property = await Property.findOne({ ownedBy: user._id });
 
-    const refreshToken = JWTProvider.generateRefreshToken({
+    const jwtPayload = {
       userId: user._id as string,
-      email,
       role: user.role,
-    });
+      email: user.email as string,
+      hotelId: property ? (property._id as string) : "",
+    };
+
+    const accessToken = JWTProvider.generateAccessToken(jwtPayload);
+
+    const refreshToken = JWTProvider.generateRefreshToken(jwtPayload);
 
     await User.findByIdAndUpdate(user._id, { $set: { refreshToken } });
 
+    res.cookie("refreshToken", refreshToken, {
+      secure: false,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      sameSite: true,
+    });
+
     return res.status(200).json({
       accessToken,
-      refreshToken,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -223,18 +251,25 @@ export async function googleAuth(req: Request, res: Response) {
       userId: user._id as string,
       role: user.role,
       email: email,
-      hotelId: property ? (property._id as string) : null,
+      hotelId: property ? (property._id as string) : "",
     });
 
     const refreshToken = JWTProvider.generateRefreshToken({
       userId: user._id as string,
       role: user.role as string,
       email: user.email as string,
-      hotelId: property ? (property._id as string) : null,
+      hotelId: property ? (property._id as string) : "",
     });
 
     user.refreshToken = refreshToken;
     await user.save();
+
+    res.cookie("refreshToken", refreshToken, {
+      secure: false,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      sameSite: true,
+    });
 
     return res.status(user.isNew ? 201 : 200).json({
       user: {
@@ -245,7 +280,6 @@ export async function googleAuth(req: Request, res: Response) {
         hotelId: property ? (property._id as string) : null,
       },
       accessToken,
-      refreshToken,
     });
   } catch (err) {
     console.error("Google auth error:", err);
@@ -255,10 +289,12 @@ export async function googleAuth(req: Request, res: Response) {
 
 export async function refreshAccessToken(req: Request, res: Response) {
   try {
-    const { refreshToken } = req.body;
-    console.log(refreshToken);
+    const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) {
       return res.status(400).json({ message: "Refresh token is required" });
+    }
+    if (JWTProvider.isTokenExpired(refreshToken)) {
+      return res.status(401).json({ message: "Session Expired" });
     }
 
     // 1️⃣ Verify refresh token
@@ -278,14 +314,14 @@ export async function refreshAccessToken(req: Request, res: Response) {
         if (!user || user.refreshToken !== refreshToken) {
           return res.status(403).json({ message: "Token mismatch" });
         }
-        const property = await Property.findOne({ ownedBy: user._id });
+        const property = await Property.findOne({ ownedBy: userId });
 
         // 3️⃣ Generate new Access Token
         const jwtPayload = {
           userId: user._id as string,
           role: user.role,
           email: user.email as string,
-          hotelId: property ? (property._id as string) : null,
+          hotelId: property ? (property._id as string) : "",
         };
 
         const accessToken = JWTProvider.generateAccessToken(jwtPayload);
@@ -311,7 +347,8 @@ async function userDetails(req: Request, res: Response) {
     email: user?.email,
     role: user?.role,
     userId: user?._id,
-    hotelId: property ? property?._id : null,
+    propertyId: property ? property?._id : "",
+    propertyName: property ? property?.name : "",
   };
   return res.status(200).json({ user: userDetails });
 }

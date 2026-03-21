@@ -11,25 +11,25 @@ export interface IProperty extends Document {
   name: string;
   description?: string;
   propertyType: PropertyType;
-  price?: number;
-  tags: string[];
   location: {
     streetAddress: string;
     city: string;
-    state: string;
     country: string;
-    pincode: string;
   };
-  coordinates: {
-    latitude: number;
-    longitude: number;
+  contacts: {
+    phone: {
+      type: string;
+    };
+    email: {
+      type: string;
+    };
   };
+
   ownedBy: Types.ObjectId;
   services: {
     name: string;
     employees: Types.ObjectId[];
   }[];
-  images: string[];
 }
 
 const propertySchema = new Schema<IProperty>(
@@ -51,48 +51,36 @@ const propertySchema = new Schema<IProperty>(
       required: true,
     },
 
-    price: {
-      type: Number,
-      min: 0,
-    },
-
-    tags: {
-      type: [String],
-      default: [],
-    },
-
     location: {
       streetAddress: { type: String, required: true },
       city: { type: String, required: true },
-      state: { type: String, required: true },
       country: { type: String, required: true },
-      pincode: { type: String, required: true },
-    },
-
-    coordinates: {
-      latitude: { type: Number, required: true },
-      longitude: { type: Number, required: true },
     },
 
     services: [
       {
         name: { type: String, required: true },
-        employees: [{ type: Schema.Types.ObjectId, ref: "user" }],
+        employees: [{ type: Schema.Types.ObjectId, ref: "User" }],
       },
     ],
+    contacts: {
+      phone: {
+        type: String,
+        required: true,
+      },
+      email: {
+        type: String,
+        required: true,
+      },
+    },
 
     ownedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
-    images: {
-      type: [String],
-      default: [],
-    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const Property = model<IProperty>("Property", propertySchema);

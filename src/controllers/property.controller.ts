@@ -12,35 +12,23 @@ async function registerProperty(req: Request, res: Response) {
       message: "Unauthorized",
     });
   }
-
-  const files = req.files as Express.MulterS3.File[];
-  const images: string[] = [];
-
-  if (files?.length) {
-    for (const file of files) {
-      if (file.location) images.push(file.location);
-    }
-  }
-
-  let parsedUserDetails;
-  try {
-    parsedUserDetails = JSON.parse(req.body.userDetails);
-  } catch {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid userDetails JSON",
-    });
-  }
+  const details = req.body.propertyDetails;
 
   const propertyData = {
-    ...parsedUserDetails,
-    images,
     ownedBy: req.user.userId,
+    name: details.name,
+    description: details.description,
+    propertyType: details.propType,
+    location: {
+      streetAddress: details.address,
+      city: details.city,
+      country: details.country,
+    },
+    contacts: {
+      phone: details.phone,
+      email: details.email,
+    },
   };
-
-  console.log(propertyData);
-
-  console.log("property data", propertyData);
 
   propertyZodSchema.parse(propertyData);
 
@@ -67,14 +55,18 @@ async function registerProperty(req: Request, res: Response) {
     { refreshToken: refreshToken },
   );
 
-  console.log("jwt payload", jwtPayload);
+  res.cookie("refreshToken", refreshToken, {
+    secure: false,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: true,
+  });
 
   return res.status(201).json({
     success: true,
     message: "Property created successfully",
     data: property,
     accessToken,
-    refreshToken,
   });
 }
 

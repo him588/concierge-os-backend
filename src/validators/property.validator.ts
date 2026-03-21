@@ -12,52 +12,31 @@ const serviceSchema = z.object({
 const locationSchema = z.object({
   streetAddress: z.string().min(1, "Street address is required"),
   city: z.string().min(1, "City is required"),
-  state: z.string().min(1, "State is required"),
   country: z.string().min(1, "Country is required"),
-  pincode: z.string().min(1, "Pincode is required"),
 });
 
-const coordinatesSchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+const contactSchema = z.object({
+  phone: z.string().min(1, "Phone number is required"),
+  email: z.string().email("Invalid email address").min(1, "Email is required"),
 });
 
 export const PropertyTypeEnum = z.enum(["Hotel", "Villa", "Apartment", "Dorm"]);
 
-export const propertyZodSchema = z
-  .object({
-    name: z.string().min(1, "Property name is required"),
+export const propertyZodSchema = z.object({
+  name: z.string().min(1, "Property name is required"),
 
-    description: z.string().optional(),
+  description: z.string().optional(),
 
-    propertyType: PropertyTypeEnum,
+  propertyType: PropertyTypeEnum,
 
-    price: z.number().positive().optional(),
+  tags: z.array(z.string()).default([]),
 
-    tags: z.array(z.string()).default([]),
+  location: locationSchema,
 
-    location: locationSchema,
+  services: z.array(serviceSchema).default([]),
+  contacts: contactSchema,
 
-    coordinates: coordinatesSchema,
-
-    services: z.array(serviceSchema).default([]),
-
-    ownedBy: objectIdSchema,
-
-    images: z.array(z.string().url()).min(3).max(5),
-  })
-  .superRefine((data, ctx) => {
-    // 🔐 Conditional price validation
-    if (
-      (data.propertyType === "Villa" || data.propertyType === "Apartment") &&
-      (!data.price || data.price <= 0)
-    ) {
-      ctx.addIssue({
-        path: ["price"],
-        message: "Price is required for Villa and Apartment",
-        code: z.ZodIssueCode.custom,
-      });
-    }
-  });
+  ownedBy: objectIdSchema,
+});
 
 export type PropertyInput = z.infer<typeof propertyZodSchema>;

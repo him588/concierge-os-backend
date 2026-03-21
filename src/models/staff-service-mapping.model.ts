@@ -36,14 +36,11 @@ const staffServiceMappingSchema = new Schema<IStaffServiceMapping>(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Unique constraint: one staff can be mapped to one service only once
-staffServiceMappingSchema.index(
-  { staffId: 1, serviceId: 1 },
-  { unique: true }
-);
+staffServiceMappingSchema.index({ staffId: 1, serviceId: 1 }, { unique: true });
 
 // Index for querying available staff for a service
 staffServiceMappingSchema.index({ serviceId: 1, isActive: 1 });
@@ -51,5 +48,5 @@ staffServiceMappingSchema.index({ staffId: 1, isActive: 1 });
 
 export const StaffServiceMapping = model<IStaffServiceMapping>(
   "StaffServiceMapping",
-  staffServiceMappingSchema
+  staffServiceMappingSchema,
 );

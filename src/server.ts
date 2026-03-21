@@ -14,7 +14,8 @@ const startServer = async () => {
     // await connectRedis();
 
     app.listen(port, () => {
-      console.log(`Server running on http://localhost:${port}`);
+      console.log(`Server running on
+         http://localhost:${port}`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);

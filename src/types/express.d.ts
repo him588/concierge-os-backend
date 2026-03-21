@@ -2,7 +2,7 @@ export interface UserPayload {
   userId: string;
   role?: string;
   email: string;
-  hotelId?: string | null;
+  hotelId?: string;
 }
 
 declare global {

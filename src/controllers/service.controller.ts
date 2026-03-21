@@ -6,6 +6,8 @@ import {
   createServiceSchema,
   updateServiceSchema,
 } from "../validators/service.validator";
+import { ServiceItem } from "../models/service-item.model";
+import { StaffServiceMapping } from "../models/staff-service-mapping.model";
 
 async function createService(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
@@ -61,8 +63,6 @@ async function createService(req: Request, res: Response) {
 async function getServices(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
 
-  console.log(hotelId);
-
   if (!hotelId) {
     return res.status(401).json({
       success: false,
@@ -70,23 +70,38 @@ async function getServices(req: Request, res: Response) {
     });
   }
 
-  const { isActive } = req.query;
-  const filter: any = { hotelId };
+  const [subServices, staffServiceMapping, services] = await Promise.all([
+    ServiceItem.find({ hotelId }),
+    StaffServiceMapping.find({ hotelId }),
+    Service.find({ hotelId }).sort({ createdAt: -1 }).select("-__v").lean(),
+  ]);
 
-  if (isActive !== undefined) {
-    filter.isActive = isActive === "true";
-  }
+  const response = services.map((item) => {
+    const staffCount = staffServiceMapping.filter(
+      (mapping) => mapping.serviceId.toString() === item._id.toString(),
+    ).length;
+    const servicesCount = subServices.filter(
+      (sub) => sub.serviceId.toString() === item._id.toString(),
+    ).length;
 
-  const services = await Service.find(filter)
-    .sort({ createdAt: -1 })
-    .select("-__v");
+    const newObj = {
+      id: item._id,
+      name: item.name,
+      color: item.color,
+      description: item.description,
+      status: item.isActive,
+      staffAssigned: staffCount,
+      subServices: servicesCount,
+    };
+    return newObj;
+  });
 
-  console.log(services);
+  console.log(response);
 
   return res.status(200).json({
     success: true,
     message: "Services fetched successfully",
-    services,
+    services: response,
   });
 }
 
@@ -101,7 +116,13 @@ async function getServiceById(req: Request, res: Response) {
     });
   }
 
-  const service = await Service.findOne({ _id: id, hotelId });
+  const [staff, subServices, service] = await Promise.all([
+    StaffServiceMapping.find({ serviceId: id, hotelId })
+      .select("-__V -createdAt -updatedAt")
+      .populate("staffId"),
+    ServiceItem.find({ serviceId: id, hotelId }),
+    Service.findOne({ _id: id, hotelId }),
+  ]);
 
   if (!service) {
     return res.status(404).json({
@@ -110,10 +131,20 @@ async function getServiceById(req: Request, res: Response) {
     });
   }
 
+  const response = {
+    serviceName: service?.name,
+    color: service?.color,
+    serviceId: service?.id,
+    staffList: staff || [],
+    subServices: subServices || [],
+  };
+
+  // const service = await Service.findOne({ _id: id, hotelId });
+
   return res.status(200).json({
     success: true,
     message: "Service fetched successfully",
-    data: service,
+    serviceDetails: response,
   });
 }
 
