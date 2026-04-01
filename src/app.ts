@@ -18,14 +18,28 @@ import { staffServiceMappingRoute } from "./routes/staff-service-mapping.routes"
 import { bookingRoute } from "./routes/booking.routes";
 import { roomBookingRoute } from "./routes/room-booking.routes";
 import { overviewRoute } from "./routes/overview.routes";
+import { authenticateWidgetUser } from "./middlewares/widget-user";
+import { isHotelOwner } from "./middlewares/isHotelOwner";
+import { WidgetUser } from "./models/widget-user.model";
 
 const app = express();
 
 /* Middlewares */
+// DASHBOARD APIs (secure)
 app.use(
+  "/api/v1",
   cors({
-    origin: process.env.CLIENT_URL || "*",
+    origin: process.env.CLIENT_URL,
     credentials: true,
+  }),
+);
+
+// WIDGET public APIs
+app.use(
+  "/widget",
+  cors({
+    origin: "*",
+    credentials: false,
   }),
 );
 
@@ -44,7 +58,7 @@ const limiter = rateLimit({
 
 const upload = multer();
 
-app.use(limiter);
+// app.use(limiter);
 
 /* Routes */
 app.use("/api/v1/auth", authRouter);
@@ -57,8 +71,19 @@ app.use("/api/v1/service-items", serviceItemRoute);
 app.use("/api/v1/staff", staffRoute);
 app.use("/api/v1/staff-service-mappings", staffServiceMappingRoute);
 app.use("/api/v1/bookings", bookingRoute);
-app.use("/api/v1/room-bookings", roomBookingRoute);
+app.use(
+  "/api/v1/room-bookings",
+  authenticateUser,
+  isHotelOwner,
+  roomBookingRoute,
+);
 app.use("/api/v1/overview", overviewRoute);
+
+// Widget routes (public)
+app.use("/widget/auth", authRouter);
+app.use("/widget/property", propertyRoute);
+app.use("/widget/room", roomRoute);
+app.use("/widget/room-booking", authenticateWidgetUser, roomBookingRoute);
 
 /* 404 Handler */
 app.use((req: Request, res: Response) => {
@@ -67,7 +92,7 @@ app.use((req: Request, res: Response) => {
 
 /* Error Handler */
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error("Error:", err.message);
+  console.error("Error:", err);
   res.status(500).json({
     message: "Internal Server Error",
     error: err.message,

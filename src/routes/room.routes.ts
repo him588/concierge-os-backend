@@ -5,9 +5,12 @@ import {
   fetchRoomType,
   listRoom,
   registerRoomType,
+  fetchRoomTypeCounts,
+  fetchRoomsForWidget,
 } from "../controllers/room.controller";
 import { isHotelOwner } from "../middlewares/isHotelOwner";
 import { upload } from "../middlewares/upload-file";
+import { authenticateWidgetUser } from "../middlewares/widget-user";
 
 export const roomRoute = Router();
 
@@ -21,3 +24,11 @@ roomRoute.post(
 );
 roomRoute.get("/get-rooms", fetchRoom);
 roomRoute.get("/get-room-status", fetchRoomStatus);
+
+//  Widget //
+roomRoute.get("/get-room-types", fetchRoomTypeCounts);
+roomRoute.get(
+  "/get-rooms-for-widget",
+  authenticateWidgetUser,
+  fetchRoomsForWidget,
+);

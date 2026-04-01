@@ -12,7 +12,7 @@ export const createStaffSchema = z.object({
 
 export const updateStaffSchema = z.object({
   name: z.string().min(1, "Staff name is required").trim().optional(),
-  email: z.string().email("Invalid email format").optional().or(z.literal("")),
+  email: z.email("Invalid email format").optional().or(z.literal("")),
   phone: z.string().optional(),
   isAvailable: z.boolean().optional(),
   isActive: z.boolean().optional(),

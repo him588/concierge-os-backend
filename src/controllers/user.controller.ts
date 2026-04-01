@@ -9,6 +9,9 @@ import JWTProvider from "../utils/jwt-provider";
 import { UserPayload } from "../types/express";
 import { asyncHandler } from "../utils/async-handler";
 import { Property } from "../models/property.model";
+import { registerWidgetUserSchema } from "../validators/widget.validator";
+import { handleZodError } from "../utils/zod-handler";
+import { WidgetUser } from "../models/widget-user.model";
 
 export async function RegisterUser(req: Request, res: Response) {
   const { name, email, password } = req.body;
@@ -353,4 +356,92 @@ async function userDetails(req: Request, res: Response) {
   return res.status(200).json({ user: userDetails });
 }
 
+async function registerWidgetUser(req: Request, res: Response) {
+  console.log("request", req.body);
+  const { name, email, password } = req.body;
+
+  console.log("password", password);
+
+  const validatePayload = registerWidgetUserSchema.safeParse({
+    name,
+    email,
+    password,
+  });
+
+  if (!validatePayload.success) {
+    return res.status(400).json(handleZodError(validatePayload.error));
+  }
+
+  const isUserExist = await WidgetUser.findOne({ email });
+
+  if (isUserExist) {
+    return res.status(400).json({ message: "User already exists" });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  const newUser = new WidgetUser({ name, email, password: passwordHash });
+
+  const generatedToken = JWTProvider.generateAccessToken(
+    {
+      userId: newUser._id as string,
+      email: newUser.email as string,
+      role: "widget-user",
+    },
+    "15d",
+  );
+  await newUser.save();
+
+  return res.status(201).json({
+    success: true,
+    message: "Widget user registered successfully",
+    accessToken: generatedToken,
+  });
+}
+
+async function loginWidgetUser(req: Request, res: Response) {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
+  const user = await WidgetUser.findOne({ email });
+
+  if (!user) {
+    return res.status(400).json({ message: "Invalid credentials" });
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+
+  if (!isMatch) {
+    return res.status(400).json({ message: "Invalid credentials" });
+  }
+
+  const generatedToken = JWTProvider.generateAccessToken(
+    {
+      userId: user._id as string,
+      email: user.email as string,
+      role: "widget-user",
+    },
+    "15d",
+  );
+
+  return res.status(200).json({
+    success: true,
+    message: "Widget user logged in successfully",
+    accessToken: generatedToken,
+  });
+}
+
+async function logoutWidgetUser(req: Request, res: Response) {
+  return res.status(200).json({
+    success: true,
+    message: "Widget user logged out successfully",
+  });
+}
+
 export const getUserDetails = asyncHandler(userDetails);
+export const registerWidgetUserHandler = asyncHandler(registerWidgetUser);
+export const loginWidgetUserHandler = asyncHandler(loginWidgetUser);
+export const logoutWidgetUserHandler = asyncHandler(logoutWidgetUser);

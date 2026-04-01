@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from "express";
-import { UserPayload } from "../types/express";
 import JWTProvider from "../utils/jwt-provider";
-import { Property } from "../models/property.model";
+import { UserPayload } from "../types/express";
 
-export async function authenticateUser(
+export async function authenticateWidgetUser(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -18,9 +17,6 @@ export async function authenticateUser(
         token.split(" ")[1],
       ) as UserPayload;
       console.log("user details from token", userDetails);
-      const property = await Property.findOne({ ownedBy: userDetails.userId });
-
-      console.log("property details", property);
 
       if (!userDetails) return;
       const { userId, email, role } = userDetails;
@@ -28,7 +24,6 @@ export async function authenticateUser(
         userId,
         email,
         role,
-        hotelId: property?._id?.toString(),
       };
       next();
     } catch (error) {

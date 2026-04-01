@@ -7,6 +7,9 @@ import {
   ResendOtp,
   VerifyUser,
   getUserDetails,
+  registerWidgetUserHandler,
+  loginWidgetUserHandler,
+  logoutWidgetUserHandler,
 } from "../controllers/user.controller";
 import { authenticateUser } from "../middlewares/authenticate-user";
 
@@ -19,5 +22,8 @@ authRouter.post("/resend-otp", ResendOtp);
 authRouter.post("/google-auth", googleAuth);
 authRouter.post("/refresh-accesstoken", refreshAccessToken);
 authRouter.get("/userDetails", authenticateUser, getUserDetails);
+authRouter.post("/registerWidgetUser", registerWidgetUserHandler);
+authRouter.post("/loginWidgetUser", loginWidgetUserHandler);
+authRouter.post("/logoutWidgetUser", logoutWidgetUserHandler);
 
 export default authRouter;

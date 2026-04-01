@@ -37,7 +37,7 @@ const bookingSchema = new Schema<IBooking>(
     },
     guestId: {
       type: Schema.Types.ObjectId,
-      ref: "User",
+      ref: "WidgetUser",
       required: true,
       index: true,
     },

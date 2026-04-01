@@ -3,10 +3,15 @@ import { asyncHandler } from "../utils/async-handler";
 import { RoomBooking, RoomBookingStatus } from "../models/room-booking.model";
 import { Room } from "../models/room.model";
 import { RoomType } from "../models/room-type.model";
+import { Property } from "../models/property.model";
 import {
   createRoomBookingSchema,
   updateRoomBookingSchema,
 } from "../validators/room-booking.validator";
+import mongoose from "mongoose";
+import { handleZodError } from "../utils/zod-handler";
+import { WidgetUser } from "../models/widget-user.model";
+import { sendBookingEmail } from "../utils/send-email";
 
 /**
  * Check if a room is available for the given date range
@@ -195,8 +200,8 @@ async function getRoomBookings(req: Request, res: Response) {
 }
 
 async function getRoomBookingById(req: Request, res: Response) {
-  const { id } = req.params;
-  const hotelId = req.user?.hotelId;
+  const { id, propertyId } = req.query;
+  const hotelId = propertyId || req.user?.hotelId;
 
   if (!hotelId) {
     return res.status(401).json({
@@ -360,8 +365,113 @@ async function cancelRoomBooking(req: Request, res: Response) {
   });
 }
 
+async function bookRoomById(req: Request, res: Response) {
+  const { roomId, hotelId, checkIn, checkOut, guests, guestId, notes } =
+    req.body;
+
+  if (!roomId) {
+    return res.status(400).json({
+      message: "Room is not available for the id",
+    });
+  }
+
+  const isAvailable = await isRoomAvailable(roomId, checkIn, checkOut);
+
+  if (!isAvailable) {
+    return res.status(400).json({
+      message: "Room is not available for selected dates",
+    });
+  }
+
+  const findRoom = await Room.findById(roomId).populate("roomTypeId hotelId");
+
+  console.log(findRoom);
+
+  if (!findRoom) {
+    return res.status(400).json({
+      message: "Room not found",
+    });
+  }
+
+  if (!findRoom.roomTypeId) {
+    return res.status(400).json({
+      message: "RoomType not linked properly",
+    });
+  }
+
+  const roomType = findRoom.roomTypeId as any;
+  const hotel = findRoom.hotelId as any;
+
+  const bookingPayload = {
+    hotelId,
+    guestId,
+    roomId,
+    roomTypeId: roomType._id.toString(),
+    checkIn,
+    checkOut,
+    numberOfGuests: guests,
+    pricePerNight: roomType.price,
+    notes,
+  };
+
+  const validatePayload = createRoomBookingSchema.safeParse(bookingPayload);
+
+  if (!validatePayload.success) {
+    return res.status(400).json(handleZodError(validatePayload.error));
+  }
+
+  const booking = await RoomBooking.create(bookingPayload);
+
+  // 🔥 Calculate derived values
+  const checkInDate = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+
+  const totalNights =
+    Math.ceil(
+      (checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24),
+    ) || 1;
+
+  const totalAmount = totalNights * roomType.price;
+
+  // 🔥 Fetch guest email
+  const guest = await WidgetUser.findById(guestId);
+  const bookingId: string = booking._id ? booking._id.toString() : "";
+
+  if (guest?.email) {
+    sendBookingEmail(
+      "../templates", // folder
+      "booking.html", // file
+      process.env.EMAIL_USER!, // sender
+      guest.email, // receiver
+      "Booking Pending - Please Complete Your Payment", // subject
+      hotel?.name || "Hotel",
+      "2024", // year (you can make dynamic)
+      hotel?.location.city || "City",
+      hotel?.location.country || "State",
+      bookingId,
+      roomType.type,
+      checkIn,
+      checkOut,
+      totalNights.toString(),
+      guests.toString(),
+      totalAmount.toString(),
+      `https://yourdomain.com/pay/${booking._id}`,
+      "15 minutes", // expire time (you can make dynamic)
+    );
+  }
+
+  return res.status(201).json({
+    message: "Booking created successfully",
+    bookingId: booking._id,
+  });
+}
+
 export const createRoomBookingHandler = asyncHandler(createRoomBooking);
 export const getRoomBookingsHandler = asyncHandler(getRoomBookings);
 export const getRoomBookingByIdHandler = asyncHandler(getRoomBookingById);
 export const updateRoomBookingHandler = asyncHandler(updateRoomBooking);
 export const cancelRoomBookingHandler = asyncHandler(cancelRoomBooking);
+
+//  Widget function//
+
+export const bookRoomThroughId = asyncHandler(bookRoomById);

@@ -9,9 +9,12 @@ class JWTProvider {
   private static REFRESH_EXPIRES_IN = "7d" as const;
 
   // Generate Access Token
-  static generateAccessToken(payload: UserPayload): string {
+  static generateAccessToken(
+    payload: UserPayload,
+    time?: "15m" | "1h" | "1d" | "15d",
+  ): string {
     const options: SignOptions = {
-      expiresIn: this.ACCESS_EXPIRES_IN,
+      expiresIn: time || this.ACCESS_EXPIRES_IN,
     };
     return jwt.sign(payload, this.ACCESS_SECRET as Secret, options);
   }

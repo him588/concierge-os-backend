@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from "express";
 export const isHotelOwner = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const user = req.user;
@@ -19,7 +19,7 @@ export const isHotelOwner = (
         message: "Only hotel owners can add rooms",
       });
     }
-
+    console.log("User is hotel owner, proceeding to next middleware");
     next();
   } catch (error) {
     next(error);

@@ -4,3 +4,11 @@ export enum PropertyType {
   Apartment = "Apartment",
   Dorm = "Dorm",
 }
+
+export type Timeframe = "week" | "month" | "year";
+
+export type HeatCell = {
+  label: string;
+  sublabel?: string;
+  value: number;
+};

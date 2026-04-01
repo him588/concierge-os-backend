@@ -6,6 +6,8 @@ import { roomZodSchema } from "../validators/room.validator";
 import { RoomType } from "../models/room-type.model";
 import { Room } from "../models/room.model";
 import { RoomBooking } from "../models/room-booking.model";
+import { handleZodError } from "../utils/zod-handler";
+import mongoose, { Mongoose } from "mongoose";
 
 async function createRoomType(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
@@ -63,17 +65,23 @@ async function getRoomType(req: Request, res: Response) {
     .sort({
       createdAt: -1,
     })
-    .select("-createdAt -updatedAt -__v -hotelId");
+    .select("-createdAt -updatedAt -__v -hotelId")
+    .lean();
+  const formattedRoomTypes = roomTypes.map((rt) => ({
+    id: rt._id,
+    ...rt,
+  }));
 
   return res.status(200).json({
     success: true,
     message: "Room type list fetched",
-    roomTypes,
+    roomTypes: formattedRoomTypes,
   });
 }
 
 async function createRoom(req: Request, res: Response) {
   try {
+    console.log("create room api called");
     const hotelId = req.user?.hotelId;
 
     if (!hotelId) {
@@ -93,8 +101,15 @@ async function createRoom(req: Request, res: Response) {
       isAvailable: req.body.isAvailable === "true", // string → boolean
     };
 
+    console.log("room data", roomData);
+    console.log("images", imageUrls);
+
     // Zod validation
-    roomZodSchema.parse(roomData);
+    const validatePayload = roomZodSchema.safeParse(roomData);
+
+    if (!validatePayload.success) {
+      return res.status(400).json(handleZodError(validatePayload.error));
+    }
 
     // Duplicate check
     const duplicateRoom = await Room.countDocuments({
@@ -138,12 +153,27 @@ async function createRoom(req: Request, res: Response) {
 
 async function getRooms(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
-  const { id } = req.query;
+  const { id, categoryId, pageSize = 10, pageNumber = 1 } = req.query;
 
-  const rooms = await Room.find({ hotelId })
+  const query: any = { hotelId: id ? id : hotelId };
+
+  if (categoryId) {
+    query["roomTypeId"] = categoryId;
+  }
+
+  const limit = Number(pageSize);
+  const page = Number(pageNumber);
+
+  // ✅ total count
+  const totalRooms = await Room.countDocuments(query);
+  const totalPages = Math.ceil(totalRooms / limit);
+
+  const rooms = await Room.find(query)
     .select("roomNumber floor images status _id")
     .populate({ path: "roomTypeId", select: "type maxGuest" })
     .sort({ createdAt: -1 })
+    .skip(limit * (page - 1))
+    .limit(limit)
     .lean();
 
   const response = rooms.map((room: any) => ({
@@ -159,6 +189,10 @@ async function getRooms(req: Request, res: Response) {
   return res.status(200).json({
     success: true,
     message: "Room list fetched successfully",
+    totalRooms,
+    totalPages,
+    currentPage: page,
+    pageSize: limit,
     rooms: response,
   });
 }
@@ -232,8 +266,123 @@ async function getRoomStatus(req: Request, res: Response) {
   });
 }
 
+//  Widget apis
+
+async function fetchRoomTypeWithCounts(req: Request, res: Response) {
+  const { hotelId } = req.query;
+  console.log("hotelId", hotelId);
+  if (!hotelId) {
+    return res.status(400).json({
+      success: false,
+      message: "Hotel ID is required",
+    });
+  }
+
+  const roomType = await RoomType.aggregate([
+    { $match: { hotelId: new mongoose.Types.ObjectId(hotelId.toString()) } },
+    {
+      $lookup: {
+        from: "rooms",
+        localField: "_id",
+        foreignField: "roomTypeId",
+        as: "rooms",
+      },
+    },
+    {
+      $addFields: {
+        roomCount: { $size: "$rooms" },
+      },
+    },
+    { $project: { type: 1, roomCount: 1, roomTypeId: "$_id", _id: 0 } },
+  ]);
+
+  const roomtypes = roomType.filter((data) => data.roomCount > 0);
+
+  return res.status(200).json({
+    success: true,
+    message: "Room types with counts fetched successfully",
+    roomTypes: roomtypes,
+  });
+}
+
+async function fetchRooms(req: Request, res: Response) {
+  const { hotelId, roomTypeId } = req.query as {
+    hotelId?: string;
+    roomTypeId?: string;
+  };
+
+  const match: any = {};
+
+  if (hotelId) {
+    match.hotelId = new mongoose.Types.ObjectId(hotelId);
+  }
+
+  if (roomTypeId) {
+    match.roomTypeId = new mongoose.Types.ObjectId(roomTypeId);
+  }
+
+  console.log(match);
+
+  const rooms = await Room.aggregate([
+    {
+      $match: match, // 🔥 dynamic filter
+    },
+    {
+      $lookup: {
+        from: "roomtypes",
+        localField: "roomTypeId",
+        foreignField: "_id",
+        as: "roomType",
+      },
+    },
+    {
+      $unwind: "$roomType",
+    },
+    {
+      $project: {
+        _id: 0,
+        id: { $toString: "$_id" },
+
+        roomNumber: "$roomNumber",
+        category: "$roomType.type",
+        price: "$roomType.price",
+        floor: "$floor",
+
+        image: {
+          $ifNull: [
+            { $arrayElemAt: ["$images", 0] },
+            "https://via.placeholder.com/300",
+          ],
+        },
+
+        amenities: "$roomType.tags",
+        maxGuests: "$roomType.maxGuest",
+
+        description: {
+          $concat: [
+            "$roomType.type",
+            " room with ",
+            { $toString: "$roomType.maxGuest" },
+            " guests capacity",
+          ],
+        },
+      },
+    },
+  ]);
+
+  return res.status(200).json({
+    success: true,
+    message: "Rooms fetched successfully",
+    count: rooms.length,
+    rooms,
+  });
+}
+
 export const registerRoomType = asyncHandler(createRoomType);
 export const fetchRoomType = asyncHandler(getRoomType);
 export const listRoom = asyncHandler(createRoom);
 export const fetchRoom = asyncHandler(getRooms);
 export const fetchRoomStatus = asyncHandler(getRoomStatus);
+export const fetchRoomTypeCounts = asyncHandler(fetchRoomTypeWithCounts);
+
+export const fetchRoomsForWidget = asyncHandler(fetchRooms);

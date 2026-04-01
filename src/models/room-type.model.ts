@@ -6,7 +6,7 @@ export interface IRoomType extends Document {
   tags: string[];
   price: number;
   maxGuest: number;
-  image: string;
+  color: string;
   isShared: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -35,7 +35,7 @@ const roomTypeSchema = new Schema<IRoomType>(
       type: Number,
       required: true,
     },
-    image: {
+    color: {
       type: String,
       required: true,
     },
@@ -46,7 +46,7 @@ const roomTypeSchema = new Schema<IRoomType>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 roomTypeSchema.index({ hotelId: 1, type: 1 }, { unique: true });

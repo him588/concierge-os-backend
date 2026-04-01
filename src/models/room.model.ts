@@ -20,7 +20,7 @@ const roomSchema = new Schema<IRoom>(
     },
     hotelId: {
       type: Schema.Types.ObjectId,
-      ref: "property",
+      ref: "Property",
       required: true,
     },
     roomNumber: {

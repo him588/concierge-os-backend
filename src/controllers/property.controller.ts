@@ -83,18 +83,19 @@ async function getProperty(req: Request, res: Response) {
     });
   }
 
-  const property = await Property.findOne({ _id: id }).select("name  ownedBy");
-  console.log(property);
+  const property = await Property.findOne({ _id: id });
+  if (!property) {
+    return res.status(400).json({
+      status: false,
+      message: "Hotel id is reqiured to fetch user details",
+    });
+  }
+
   return res.status(200).json({
     status: true,
     message: "property details fetched successfully",
     property,
   });
-  // return res.status(200).json({
-  //   status: true,
-  //   message: "user details fetched success fully",
-  //   property,
-  // });
 }
 
 export const registerUserHandler = asyncHandler(registerProperty);

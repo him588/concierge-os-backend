@@ -10,15 +10,15 @@ export enum RoomBookingStatus {
 
 export interface IRoomBooking extends Document {
   hotelId: Types.ObjectId;
-  guestId: Types.ObjectId; // Reference to User with role "guest"
-  roomId: Types.ObjectId; // Booked room
-  roomTypeId: Types.ObjectId; // Denormalized for quick queries
-  checkIn: Date; // Check-in date
-  checkOut: Date; // Check-out date
+  guestId: Types.ObjectId;
+  roomId: Types.ObjectId;
+  roomTypeId: Types.ObjectId;
+  checkIn: Date;
+  checkOut: Date;
   numberOfGuests: number;
-  pricePerNight: number; // Price at time of booking (for historical accuracy)
-  totalNights: number; // Calculated from checkIn and checkOut
-  totalAmount: number; // totalNights * pricePerNight
+  pricePerNight: number;
+  totalNights: number;
+  totalAmount: number;
   status: RoomBookingStatus;
   notes?: string;
   createdAt: Date;
@@ -35,8 +35,8 @@ const roomBookingSchema = new Schema<IRoomBooking>(
     },
     guestId: {
       type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      ref: "WidgetUser",
+      required: false,
       index: true,
     },
     roomId: {
@@ -95,7 +95,7 @@ const roomBookingSchema = new Schema<IRoomBooking>(
 );
 
 // Pre-save hook to calculate totalNights and totalAmount
-roomBookingSchema.pre("save", function (next) {
+roomBookingSchema.pre("validate", function (next) {
   if (this.checkIn && this.checkOut) {
     const timeDiff = this.checkOut.getTime() - this.checkIn.getTime();
     const nights = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
