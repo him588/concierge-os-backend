@@ -5,13 +5,12 @@ import { RoomBookingStatus } from "../models/room-booking.model";
 export const createRoomBookingSchema = z
   .object({
     hotelId: objectIdSchema,
-
-    // ✅ optional (walk-in booking)
     guestId: objectIdSchema.optional(),
-
-    roomId: objectIdSchema,
+    guestName: z.string().trim().optional(),
+    guestEmail: z.string().email().optional(),
+    guestPhone: z.string().trim().optional(),
+    roomId: objectIdSchema.optional(),
     roomTypeId: objectIdSchema, // ✅ added
-
     checkIn: z.string().refine(
       (date) => {
         const parsed = new Date(date);
@@ -19,7 +18,6 @@ export const createRoomBookingSchema = z
       },
       { message: "Check-in must be a valid future date" },
     ),
-
     checkOut: z.string().refine(
       (date) => {
         const parsed = new Date(date);
@@ -27,18 +25,13 @@ export const createRoomBookingSchema = z
       },
       { message: "Check-out must be a valid future date" },
     ),
-
     numberOfGuests: z
       .number()
       .int()
       .positive("Number of guests must be at least 1"),
-
     pricePerNight: z.number().min(0, "Price must be >= 0"), // ✅ added
-
     notes: z.string().trim().optional(),
   })
-
-  // ✅ cross-field validation
   .superRefine((data, ctx) => {
     const checkIn = new Date(data.checkIn);
     const checkOut = new Date(data.checkOut);
@@ -50,11 +43,28 @@ export const createRoomBookingSchema = z
         code: z.ZodIssueCode.custom,
       });
     }
-
-    // ✅ ensure either guestId or manual booking (future-proof)
     if (!data.guestId) {
-      // optional: allow, or enforce later if needed
-      // ctx.addIssue({...})
+      if (!data.guestName || data.guestName.trim() === "") {
+        ctx.addIssue({
+          path: ["guestName"],
+          message: "Guest name is required when guestId is not provided",
+          code: z.ZodIssueCode.custom,
+        });
+      }
+      if (!data.guestEmail || data.guestEmail.trim() === "") {
+        ctx.addIssue({
+          path: ["guestEmail"],
+          message: "Guest email is required when guestId is not provided",
+          code: z.ZodIssueCode.custom,
+        });
+      }
+      if (!data.guestPhone || data.guestPhone.trim() === "") {
+        ctx.addIssue({
+          path: ["guestPhone"],
+          message: "Guest phone is required when guestId is not provided",
+          code: z.ZodIssueCode.custom,
+        });
+      }
     }
   });
 

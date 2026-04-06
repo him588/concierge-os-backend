@@ -2,16 +2,15 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../utils/async-handler";
 import { RoomBooking, RoomBookingStatus } from "../models/room-booking.model";
 import { Room } from "../models/room.model";
-import { RoomType } from "../models/room-type.model";
-import { Property } from "../models/property.model";
 import {
   createRoomBookingSchema,
   updateRoomBookingSchema,
 } from "../validators/room-booking.validator";
-import mongoose from "mongoose";
 import { handleZodError } from "../utils/zod-handler";
 import { WidgetUser } from "../models/widget-user.model";
 import { sendBookingEmail } from "../utils/send-email";
+import JWTProvider from "../utils/jwt-provider";
+import razorpay from "../utils/razorpay-config";
 
 /**
  * Check if a room is available for the given date range
@@ -51,7 +50,8 @@ async function isRoomAvailable(
 
 async function createRoomBooking(req: Request, res: Response) {
   const hotelId = req.user?.hotelId || req.body.hotelId;
-
+  const { guestName, phone, email, categoryId, checkIn, checkOut, guests } =
+    req.body;
   if (!hotelId) {
     return res.status(401).json({
       success: false,
@@ -60,19 +60,33 @@ async function createRoomBooking(req: Request, res: Response) {
   }
 
   const bookingData = {
-    ...req.body,
     hotelId,
+    guestName,
+    guestPhone: phone,
+    guestEmail: email,
+    roomTypeId: categoryId,
+    checkIn: checkIn,
+    checkOut: checkOut,
+    numberOfGuests: guests,
+    pricePerNight: 0, // will be calculated based on room type
   };
 
-  createRoomBookingSchema.parse(bookingData);
+  console.log(bookingData);
+  const validatePayload = createRoomBookingSchema.safeParse(bookingData);
+
+  console.log("validated payload:", validatePayload);
+
+  if (!validatePayload.success) {
+    return res.status(400).json(handleZodError(validatePayload.error));
+  }
 
   // Parse dates
-  const checkIn = new Date(bookingData.checkIn);
-  const checkOut = new Date(bookingData.checkOut);
+  const checkInDate = new Date(bookingData.checkIn);
+  const checkOutDate = new Date(bookingData.checkOut);
 
   // Verify room exists and belongs to hotel
   const room = await Room.findOne({
-    _id: bookingData.roomId,
+    roomTypeId: bookingData.roomTypeId,
     hotelId,
     status: "available",
   }).populate({ path: "roomTypeId" });
@@ -96,9 +110,9 @@ async function createRoomBooking(req: Request, res: Response) {
 
   // Check room availability for the date range
   const available = await isRoomAvailable(
-    bookingData.roomId,
-    checkIn,
-    checkOut,
+    (room._id as any).toString() || "",
+    checkInDate,
+    checkOutDate,
   );
 
   if (!available) {
@@ -107,25 +121,18 @@ async function createRoomBooking(req: Request, res: Response) {
       message: "Room is not available for the selected dates",
     });
   }
-
-  // Calculate total nights
-  const timeDiff = checkOut.getTime() - checkIn.getTime();
-  const totalNights = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-
+  console.log("Room is available, proceeding to create booking", {
+    ...bookingData,
+  });
   const roomBooking = await RoomBooking.create({
     ...bookingData,
+    roomId: room._id,
     roomTypeId: roomType._id,
+
     checkIn,
     checkOut,
     pricePerNight: roomType.price,
-    totalNights,
-    totalAmount: totalNights * roomType.price,
-    status: RoomBookingStatus.PENDING,
-  });
-
-  // Update room status to booked
-  await Room.findByIdAndUpdate(bookingData.roomId, {
-    $set: { status: "booked" },
+    status: RoomBookingStatus.CONFIRMED,
   });
 
   const populatedBooking = await RoomBooking.findById(roomBooking._id)
@@ -368,6 +375,7 @@ async function cancelRoomBooking(req: Request, res: Response) {
 async function bookRoomById(req: Request, res: Response) {
   const { roomId, hotelId, checkIn, checkOut, guests, guestId, notes } =
     req.body;
+  let orderId = "";
 
   if (!roomId) {
     return res.status(400).json({
@@ -437,6 +445,27 @@ async function bookRoomById(req: Request, res: Response) {
   const guest = await WidgetUser.findById(guestId);
   const bookingId: string = booking._id ? booking._id.toString() : "";
 
+  if (totalAmount > 0) {
+    const options = {
+      amount: totalAmount * 100, // Razorpay expects amount in smallest currency unit (paise)
+      currency: "INR",
+      receipt: `receipt_${Date.now()}`,
+      notes: {
+        description: `Payment for room booking for ${roomType.type} at ${hotel.name}`,
+      },
+    };
+    const order = await razorpay.orders.create(options);
+    orderId = order.id;
+    console.log("Razorpay order created:", order);
+  }
+
+  const paymentToken = JWTProvider.generatePaymentToken({
+    guestId: (guest?._id as any)?.toString() || "",
+    bookingType: "room",
+    rooms: [{ roomBookingId: bookingId }],
+    orderId,
+  });
+
   if (guest?.email) {
     sendBookingEmail(
       "../templates", // folder
@@ -455,7 +484,7 @@ async function bookRoomById(req: Request, res: Response) {
       totalNights.toString(),
       guests.toString(),
       totalAmount.toString(),
-      `https://yourdomain.com/pay/${booking._id}`,
+      `${process.env.FrontendURL}/payment/${paymentToken}`,
       "15 minutes", // expire time (you can make dynamic)
     );
   }

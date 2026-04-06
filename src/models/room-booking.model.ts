@@ -15,6 +15,9 @@ export interface IRoomBooking extends Document {
   roomTypeId: Types.ObjectId;
   checkIn: Date;
   checkOut: Date;
+  guestName: string;
+  guestPhone: string;
+  guestEmail: string;
   numberOfGuests: number;
   pricePerNight: number;
   totalNights: number;
@@ -38,6 +41,15 @@ const roomBookingSchema = new Schema<IRoomBooking>(
       ref: "WidgetUser",
       required: false,
       index: true,
+    },
+    guestName: {
+      type: String,
+    },
+    guestPhone: {
+      type: String,
+    },
+    guestEmail: {
+      type: String,
     },
     roomId: {
       type: Schema.Types.ObjectId,
@@ -102,6 +114,27 @@ roomBookingSchema.pre("validate", function (next) {
     this.totalNights = nights > 0 ? nights : 1;
     this.totalAmount = this.totalNights * this.pricePerNight;
   }
+  if (!this.guestId) {
+    if (!this.guestName || this.guestName.trim() === "") {
+      this.invalidate(
+        "guestName",
+        "Guest name is required when guestId is not provided",
+      );
+    }
+    if (!this.guestEmail || this.guestEmail.trim() === "") {
+      this.invalidate(
+        "guestEmail",
+        "Guest email is required when guestId is not provided",
+      );
+    }
+    if (!this.guestPhone || this.guestPhone.trim() === "") {
+      this.invalidate(
+        "guestPhone",
+        "Guest phone is required when guestId is not provided",
+      );
+    }
+  }
+
   next();
 });
 

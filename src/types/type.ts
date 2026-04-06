@@ -12,3 +12,11 @@ export type HeatCell = {
   sublabel?: string;
   value: number;
 };
+
+export type PaymentPayload = {
+  bookingType: "room" | "service";
+  guestId: string;
+  rooms?: [{ roomBookingId: string }];
+  services?: [{ sevicesBookingId?: string; seviceName: string }];
+  orderId: string;
+};

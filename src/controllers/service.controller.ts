@@ -8,6 +8,7 @@ import {
 } from "../validators/service.validator";
 import { ServiceItem } from "../models/service-item.model";
 import { StaffServiceMapping } from "../models/staff-service-mapping.model";
+import mongoose from "mongoose";
 
 async function createService(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
@@ -61,47 +62,92 @@ async function createService(req: Request, res: Response) {
 }
 
 async function getServices(req: Request, res: Response) {
-  const hotelId = req.user?.hotelId;
+  const { id } = req.query;
+  const hotelId = id ? id : req.user?.hotelId;
 
   if (!hotelId) {
-    return res.status(401).json({
+    return res.status(400).json({
       success: false,
       message: "Hotel ID is required",
     });
   }
-
-  const [subServices, staffServiceMapping, services] = await Promise.all([
-    ServiceItem.find({ hotelId }),
-    StaffServiceMapping.find({ hotelId }),
-    Service.find({ hotelId }).sort({ createdAt: -1 }).select("-__v").lean(),
+  const findServices = await Service.aggregate([
+    { $match: { hotelId: new mongoose.Types.ObjectId(hotelId.toString()) } },
+    {
+      $lookup: {
+        from: "serviceitems",
+        localField: "_id",
+        foreignField: "serviceId",
+        as: "serviceItems",
+      },
+    },
+    {
+      $lookup: {
+        from: "staffservicemappings",
+        localField: "_id",
+        foreignField: "serviceId",
+        as: "staff",
+      },
+    },
+    {
+      $addFields: {
+        serviceCount: { $size: "$serviceItems" },
+      },
+    },
+    {
+      $addFields: {
+        staffCount: { $size: "$staff" },
+      },
+    },
+    {
+      $project: {
+        name: 1,
+        description: 1,
+        color: 1,
+        isActive: 1,
+        serviceId: "$_id",
+        serviceCount: 1,
+        staffCount: 1,
+        serviceItems: 1,
+        _id: 0,
+      },
+    },
   ]);
 
-  const response = services.map((item) => {
-    const staffCount = staffServiceMapping.filter(
-      (mapping) => mapping.serviceId.toString() === item._id.toString(),
-    ).length;
-    const servicesCount = subServices.filter(
-      (sub) => sub.serviceId.toString() === item._id.toString(),
-    ).length;
+  console.log(findServices);
 
-    const newObj = {
-      id: item._id,
-      name: item.name,
-      color: item.color,
-      description: item.description,
-      status: item.isActive,
-      staffAssigned: staffCount,
-      subServices: servicesCount,
-    };
-    return newObj;
-  });
+  // const [subServices, staffServiceMapping, services] = await Promise.all([
+  //   ServiceItem.find({ hotelId }),
+  //   StaffServiceMapping.find({ hotelId }),
+  //   Service.find({ hotelId }).sort({ createdAt: -1 }).select("-__v").lean(),
+  // ]);
 
-  console.log(response);
+  // const response = services.map((item) => {
+  //   const staffCount = staffServiceMapping.filter(
+  //     (mapping) => mapping.serviceId.toString() === item._id.toString(),
+  //   ).length;
+  //   const servicesCount = subServices.filter(
+  //     (sub) => sub.serviceId.toString() === item._id.toString(),
+  //   ).length;
+
+  //   const newObj = {
+  //     id: item._id,
+  //     name: item.name,
+  //     color: item.color,
+  //     description: item.description,
+  //     status: item.isActive,
+  //     staffAssigned: staffCount,
+  //     subServices: servicesCount,
+  //   };
+  //   return newObj;
+  // });
+
+  // console.log(response);
 
   return res.status(200).json({
     success: true,
     message: "Services fetched successfully",
-    services: response,
+    services: findServices,
   });
 }
 
@@ -110,41 +156,54 @@ async function getServiceById(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
 
   if (!hotelId) {
-    return res.status(401).json({
+    return res.status(400).json({
       success: false,
       message: "Hotel ID is required",
     });
   }
 
-  const [staff, subServices, service] = await Promise.all([
-    StaffServiceMapping.find({ serviceId: id, hotelId })
-      .select("-__V -createdAt -updatedAt")
-      .populate("staffId"),
-    ServiceItem.find({ serviceId: id, hotelId }),
-    Service.findOne({ _id: id, hotelId }),
+  const findServices = await Service.aggregate([
+    { $match: { hotelId } },
+    {
+      $lookup: {
+        from: "property",
+        localField: "hotelId",
+        foreignField: "_id",
+        as: "property",
+      },
+    },
   ]);
 
-  if (!service) {
-    return res.status(404).json({
-      success: false,
-      message: "Service not found",
-    });
-  }
+  console.log(findServices);
 
-  const response = {
-    serviceName: service?.name,
-    color: service?.color,
-    serviceId: service?.id,
-    staffList: staff || [],
-    subServices: subServices || [],
-  };
+  // const [staff, subServices, service] = await Promise.all([
+  //   StaffServiceMapping.find({ serviceId: id, hotelId })
+  //     .select("-__V -createdAt -updatedAt")
+  //     .populate("staffId"),
+  //   ServiceItem.find({ serviceId: id, hotelId }),
+  //   Service.findOne({ _id: id, hotelId }),
+  // ]);
+
+  // if (!service) {
+  //   return res.status(404).json({
+  //     success: false,
+  //     message: "Service not found",
+  //   });
+  // }
+
+  // const response = {
+  //   serviceName: service?.name,
+  //   color: service?.color,
+  //   serviceId: service?.id,
+  //   staffList: staff || [],
+  //   subServices: subServices || [],
+  // };
 
   // const service = await Service.findOne({ _id: id, hotelId });
 
   return res.status(200).json({
     success: true,
     message: "Service fetched successfully",
-    serviceDetails: response,
   });
 }
 

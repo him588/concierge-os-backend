@@ -144,7 +144,7 @@ async function updateStaffServiceMapping(req: Request, res: Response) {
   const mapping = await StaffServiceMapping.findOneAndUpdate(
     { _id: id, hotelId },
     { $set: updateData },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   )
     .populate({ path: "staffId", select: "name email" })
     .populate({ path: "serviceId", select: "name description" });
@@ -178,7 +178,7 @@ async function deleteStaffServiceMapping(req: Request, res: Response) {
   const mapping = await StaffServiceMapping.findOneAndUpdate(
     { _id: id, hotelId },
     { $set: { isActive: false } },
-    { new: true }
+    { new: true },
   );
 
   if (!mapping) {
@@ -195,14 +195,14 @@ async function deleteStaffServiceMapping(req: Request, res: Response) {
 }
 
 export const createStaffServiceMappingHandler = asyncHandler(
-  createStaffServiceMapping
+  createStaffServiceMapping,
 );
 export const getStaffServiceMappingsHandler = asyncHandler(
-  getStaffServiceMappings
+  getStaffServiceMappings,
 );
 export const updateStaffServiceMappingHandler = asyncHandler(
-  updateStaffServiceMapping
+  updateStaffServiceMapping,
 );
 export const deleteStaffServiceMappingHandler = asyncHandler(
-  deleteStaffServiceMapping
+  deleteStaffServiceMapping,
 );

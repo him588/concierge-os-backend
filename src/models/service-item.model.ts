@@ -1,14 +1,21 @@
 import mongoose, { Schema, model, Document, Types } from "mongoose";
 
+export enum ListingType {
+  QUANTITY = "quantity", // Food, amenities, consumables
+  PERSON = "person", // Spa, fitness classes, consultations
+}
+
 export interface IServiceItem extends Document {
   name: string;
   description?: string;
-  serviceId: Types.ObjectId; // Parent service (Spa, Food, etc.)
-  price: number; // 0 for free services, > 0 for paid
-  isFree: boolean; // Computed from price, but stored for quick queries
-  isAutoIncluded: boolean; // For free services that are auto-included
-  isAvailable: boolean; // Availability flag
-  hotelId: Types.ObjectId; // Denormalized for quick queries
+  serviceId: Types.ObjectId;
+  price: number;
+  isFree: boolean;
+  isAutoIncluded: boolean;
+  isAvailable: boolean;
+  hotelId: Types.ObjectId;
+  listingType: ListingType;
+  maxQuantityPerBooking?: number; // Optional: limit quantity
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +60,19 @@ const serviceItemSchema = new Schema<IServiceItem>(
       ref: "Property",
       required: true,
       index: true,
+    },
+
+    // NEW FIELDS
+    listingType: {
+      type: String,
+      enum: Object.values(ListingType),
+      default: ListingType.QUANTITY,
+      required: true,
+    },
+    maxQuantityPerBooking: {
+      type: Number,
+      min: 1,
+      default: 10, // Default max
     },
   },
   { timestamps: true },

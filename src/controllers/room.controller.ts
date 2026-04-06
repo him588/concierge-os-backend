@@ -266,6 +266,141 @@ async function getRoomStatus(req: Request, res: Response) {
   });
 }
 
+async function getRoomTypeDetails(req: Request, res: Response) {
+  const { id } = req.params;
+  const hotelId = req.user?.hotelId;
+  if (!hotelId) {
+    res.status(401).json({ message: "Unauthorized", status: false });
+  }
+
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      message: "Room type ID is required",
+    });
+  }
+
+  const roomTypes = await RoomType.aggregate([
+    { $match: { _id: new mongoose.Types.ObjectId(id) } },
+    {
+      $lookup: {
+        from: "rooms",
+        localField: "_id",
+        foreignField: "roomTypeId",
+        as: "rooms",
+      },
+    },
+    {
+      $addFields: {
+        roomCount: { $size: "$rooms" },
+      },
+    },
+    {
+      $project: {
+        type: 1,
+        price: 1,
+        tags: 1,
+        maxGuest: 1,
+        roomCount: 1,
+        roomTypeId: "$_id",
+        _id: 0,
+      },
+    },
+  ]);
+  return res.status(200).json({
+    success: true,
+    message: "Room type details fetched successfully",
+    roomType: roomTypes[0],
+  });
+}
+
+async function getRoomStatusByRoomTypeId(req: Request, res: Response) {
+  const { roomTypeId } = req.params;
+  const hotelId = req.user?.hotelId;
+  if (!hotelId) {
+    res.status(401).json({ message: "Unauthorized", status: false });
+  }
+  if (!roomTypeId) {
+    return res.status(400).json({
+      success: false,
+      message: "Room type ID is required",
+    });
+  }
+  const rooms = await Room.find({ hotelId, roomTypeId: roomTypeId })
+    .populate("roomTypeId")
+    .lean();
+  const roomBooking = await RoomBooking.find({
+    hotelId,
+    roomTypeId: roomTypeId,
+    checkOut: { $gte: new Date() },
+  });
+
+  const allRooms = rooms.map((room: any) => {
+    const booking = roomBooking.find(
+      (b: any) => b.roomId.toString() === room._id.toString(),
+    );
+
+    if (room.status === "maintenance") {
+      return {
+        roomNo: room.roomNumber,
+        roomType: room.roomTypeId?.type,
+        status: "maintenance",
+        roomId: room._id,
+        images: room.images,
+        floor: room.floor,
+      };
+    }
+
+    if (booking) {
+      const checkIn = new Date(booking.checkIn);
+      const checkOut = new Date(booking.checkOut);
+      const now = new Date();
+
+      if (now >= checkIn && now <= checkOut) {
+        return {
+          roomNo: room.roomNumber,
+          roomType: room.roomTypeId?.type,
+          images: room.images,
+          status: "occupied",
+          roomId: room._id,
+          floor: room.floor,
+          daysRemaining: Math.ceil(
+            (checkOut.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          ),
+        };
+      } else if (checkIn > now) {
+        return {
+          roomNo: room.roomNumber,
+          roomType: room.roomTypeId?.type,
+          status: "upcoming",
+          images: room.images,
+          roomId: room._id,
+          floor: room.floor,
+          daysUntilCheckIn: Math.ceil(
+            (checkIn.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          ),
+        };
+      }
+    }
+
+    return {
+      roomNo: room.roomNumber,
+      roomType: room.roomTypeId?.type,
+      status: "available",
+      roomId: room._id,
+      images: room.images,
+      floor: room.floor,
+    };
+  });
+
+  console.log(allRooms);
+  return res.status(200).json({
+    success: true,
+    message: "Room status fetched successfully",
+    rooms: allRooms.sort((a, b) => a.roomNo - b.roomNo),
+  });
+}
+
 //  Widget apis
 
 async function fetchRoomTypeWithCounts(req: Request, res: Response) {
@@ -384,5 +519,7 @@ export const listRoom = asyncHandler(createRoom);
 export const fetchRoom = asyncHandler(getRooms);
 export const fetchRoomStatus = asyncHandler(getRoomStatus);
 export const fetchRoomTypeCounts = asyncHandler(fetchRoomTypeWithCounts);
+export const fetchRoomTypeDetails = asyncHandler(getRoomTypeDetails);
+export const getRoomStatusById = asyncHandler(getRoomStatusByRoomTypeId);
 
 export const fetchRoomsForWidget = asyncHandler(fetchRooms);

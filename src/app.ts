@@ -20,7 +20,7 @@ import { roomBookingRoute } from "./routes/room-booking.routes";
 import { overviewRoute } from "./routes/overview.routes";
 import { authenticateWidgetUser } from "./middlewares/widget-user";
 import { isHotelOwner } from "./middlewares/isHotelOwner";
-import { WidgetUser } from "./models/widget-user.model";
+import { paymentRoute } from "./routes/payment.route";
 
 const app = express();
 
@@ -66,7 +66,7 @@ app.use("/api/v1/property", propertyRoute);
 app.use("/api/v1/room", authenticateUser, roomRoute);
 
 // Dynamic Services & Staff Management Routes
-app.use("/api/v1/services", serviceRoute);
+app.use("/api/v1/services", authenticateUser, isHotelOwner, serviceRoute);
 app.use("/api/v1/service-items", serviceItemRoute);
 app.use("/api/v1/staff", staffRoute);
 app.use("/api/v1/staff-service-mappings", staffServiceMappingRoute);
@@ -78,12 +78,14 @@ app.use(
   roomBookingRoute,
 );
 app.use("/api/v1/overview", overviewRoute);
+app.use("/api/v1/payment", paymentRoute);
 
 // Widget routes (public)
 app.use("/widget/auth", authRouter);
 app.use("/widget/property", propertyRoute);
 app.use("/widget/room", roomRoute);
 app.use("/widget/room-booking", authenticateWidgetUser, roomBookingRoute);
+app.use("/widget/services", authenticateWidgetUser, serviceRoute);
 
 /* 404 Handler */
 app.use((req: Request, res: Response) => {
