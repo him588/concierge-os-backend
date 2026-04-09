@@ -9,6 +9,8 @@ import {
   fetchRoomsForWidget,
   fetchRoomTypeDetails,
   getRoomStatusById,
+  updateRoomTypeDetails,
+  fetchRoomDetails,
 } from "../controllers/room.controller";
 import { isHotelOwner } from "../middlewares/isHotelOwner";
 import { upload } from "../middlewares/upload-file";
@@ -28,6 +30,8 @@ roomRoute.get("/get-rooms", fetchRoom);
 roomRoute.get("/get-room-status", fetchRoomStatus);
 roomRoute.get("/get-room-status/room-type/:roomTypeId", getRoomStatusById);
 roomRoute.get("/get-room-type/:id", fetchRoomTypeDetails);
+roomRoute.put("/update-room-type", isHotelOwner, updateRoomTypeDetails);
+roomRoute.get("/get-room-details/:id", fetchRoomDetails);
 
 //  Widget //
 roomRoute.get("/get-room-types", fetchRoomTypeCounts);

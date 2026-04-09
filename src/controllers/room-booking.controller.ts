@@ -484,7 +484,7 @@ async function bookRoomById(req: Request, res: Response) {
       totalNights.toString(),
       guests.toString(),
       totalAmount.toString(),
-      `${process.env.FrontendURL}/payment/${paymentToken}`,
+      `${process.env.CLIENT_URL}/payment/${paymentToken}`,
       "15 minutes", // expire time (you can make dynamic)
     );
   }

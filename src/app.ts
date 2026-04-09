@@ -21,6 +21,7 @@ import { overviewRoute } from "./routes/overview.routes";
 import { authenticateWidgetUser } from "./middlewares/widget-user";
 import { isHotelOwner } from "./middlewares/isHotelOwner";
 import { paymentRoute } from "./routes/payment.route";
+import { startBookingCron } from "./jobs/booking";
 
 const app = express();
 
@@ -43,7 +44,6 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(helmet());
@@ -59,6 +59,8 @@ const limiter = rateLimit({
 const upload = multer();
 
 // app.use(limiter);
+app.use("/api/v1/payment", paymentRoute);
+app.use(express.json({ limit: "10mb" }));
 
 /* Routes */
 app.use("/api/v1/auth", authRouter);
@@ -78,7 +80,6 @@ app.use(
   roomBookingRoute,
 );
 app.use("/api/v1/overview", overviewRoute);
-app.use("/api/v1/payment", paymentRoute);
 
 // Widget routes (public)
 app.use("/widget/auth", authRouter);
@@ -86,6 +87,9 @@ app.use("/widget/property", propertyRoute);
 app.use("/widget/room", roomRoute);
 app.use("/widget/room-booking", authenticateWidgetUser, roomBookingRoute);
 app.use("/widget/services", authenticateWidgetUser, serviceRoute);
+
+// Start cron jobs
+startBookingCron();
 
 /* 404 Handler */
 app.use((req: Request, res: Response) => {

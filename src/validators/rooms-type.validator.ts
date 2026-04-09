@@ -9,3 +9,9 @@ export const roomTypeZodSchema = z.object({
   color: z.string(),
   isShared: z.boolean(),
 });
+
+export const roomTypeUpdateZodSchema = z.object({
+  type: z.string().min(3, "Type should not less than 3 char "),
+  price: z.number().positive("Price must be greater than 0"),
+  maxGuest: z.number().positive().min(1, "At least one guest required"),
+});

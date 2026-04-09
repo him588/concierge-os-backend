@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
 import { ZodError } from "zod";
 import { asyncHandler } from "../utils/async-handler";
-import { roomTypeZodSchema } from "../validators/rooms-type.validator";
+import {
+  roomTypeUpdateZodSchema,
+  roomTypeZodSchema,
+} from "../validators/rooms-type.validator";
 import { roomZodSchema } from "../validators/room.validator";
 import { RoomType } from "../models/room-type.model";
 import { Room } from "../models/room.model";
@@ -11,7 +14,7 @@ import mongoose, { Mongoose } from "mongoose";
 
 async function createRoomType(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
-  const roomtype = { ...req.body, hotelId };
+  const roomtype = { ...req.body, hotelId, type: req.body.type.toUpperCase() };
 
   console.log("create room api called");
 
@@ -401,6 +404,75 @@ async function getRoomStatusByRoomTypeId(req: Request, res: Response) {
   });
 }
 
+async function updateRoomType(req: Request, res: Response) {
+  const { id, type, price, maxGuest } = req.body;
+
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      message: "Room type id is required",
+    });
+  }
+
+  const validatePayload = roomTypeUpdateZodSchema.safeParse({
+    type,
+    price,
+    maxGuest,
+  });
+
+  if (!validatePayload.success) {
+    return res.status(400).json(handleZodError(validatePayload.error));
+  }
+
+  const existingRoomType = await RoomType.findOne({
+    _id: { $ne: id },
+    type: type,
+    hotelId: req.user?.hotelId,
+  });
+
+  if (existingRoomType) {
+    return res.status(400).json({
+      success: false,
+      message: "Room type with this name already exists",
+    });
+  }
+
+  const updateRoomType = await RoomType.findByIdAndUpdate(
+    id,
+    {
+      type: type.toUpperCase(),
+      price,
+      maxGuest,
+    },
+    { new: true },
+  );
+
+  return res.status(200).json({
+    success: true,
+    message: "Room type updated successfully",
+    roomType: updateRoomType,
+  });
+}
+
+async function getRoomDetails(req: Request, res: Response) {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      message: "Room ID is required",
+    });
+  }
+
+  const room = await Room.findOne({ _id: id })
+    .populate({ path: "roomTypeId", select: "type price tags maxGuest" })
+    .lean();
+  return res.status(200).json({
+    success: true,
+    message: "Room details fetched successfully",
+    room: room,
+  });
+}
+
 //  Widget apis
 
 async function fetchRoomTypeWithCounts(req: Request, res: Response) {
@@ -518,8 +590,10 @@ export const fetchRoomType = asyncHandler(getRoomType);
 export const listRoom = asyncHandler(createRoom);
 export const fetchRoom = asyncHandler(getRooms);
 export const fetchRoomStatus = asyncHandler(getRoomStatus);
-export const fetchRoomTypeCounts = asyncHandler(fetchRoomTypeWithCounts);
 export const fetchRoomTypeDetails = asyncHandler(getRoomTypeDetails);
 export const getRoomStatusById = asyncHandler(getRoomStatusByRoomTypeId);
+export const updateRoomTypeDetails = asyncHandler(updateRoomType);
+export const fetchRoomDetails = asyncHandler(getRoomDetails);
 
 export const fetchRoomsForWidget = asyncHandler(fetchRooms);
+export const fetchRoomTypeCounts = asyncHandler(fetchRoomTypeWithCounts);

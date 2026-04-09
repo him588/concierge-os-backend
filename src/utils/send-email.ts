@@ -151,3 +151,78 @@ export function sendBookingEmail(
     }
   });
 }
+
+export function sendConfirmedBookingEmail(
+  directory: string,
+  fileName: string,
+  senderEmail: string,
+  recieverEmail: string,
+  subject: string,
+  propertyName: string,
+  year: string,
+  city: string,
+  state: string,
+  bookingId: string,
+  guestName: string,
+  guestEmail: string,
+  roomType: string,
+  roomNumber: string,
+  floor: string,
+  checkIn: string,
+  checkOut: string,
+  totalNights: string,
+  guests: string,
+  totalAmount: string,
+  supportEmail: string,
+  supportPhone: string,
+) {
+  const htmlPath = path.join(__dirname, directory, fileName);
+  let htmlContent = fs.readFileSync(htmlPath, "utf8");
+
+  // Template data for confirmed booking
+  const data = {
+    propertyName,
+    year,
+    city,
+    state,
+    bookingId,
+    guestName,
+    guestEmail,
+    roomType,
+    roomNumber,
+    floor,
+    checkIn,
+    checkOut,
+    totalNights,
+    guests,
+    totalAmount,
+    supportEmail,
+    supportPhone,
+  };
+
+  // Inject values into template
+  htmlContent = fillTemplate(htmlContent, data);
+
+  const transporter = createTransport({
+    service: "Gmail",
+    auth: {
+      user: senderEmail,
+      pass: "lmui cymr byrk itcu",
+    },
+  });
+
+  const mailOptions = {
+    from: senderEmail,
+    to: recieverEmail,
+    subject: subject,
+    html: htmlContent,
+  };
+
+  transporter.sendMail(mailOptions, function (error, info) {
+    if (error) {
+      console.error(error);
+    } else {
+      console.log("Email sent: " + info.response);
+    }
+  });
+}
