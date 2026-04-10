@@ -473,6 +473,31 @@ async function getRoomDetails(req: Request, res: Response) {
   });
 }
 
+async function changeRoomStatus(req: Request, res: Response) {
+  const { roomId, status } = req.body;
+  if (!roomId) {
+    return res.status(400).json({
+      status: false,
+      message: "RoomId is required",
+    });
+  }
+  if (status !== "available" && status !== "maintenance") {
+    return res.status(400).json({
+      status: false,
+      message: "room status  not matched the status type ",
+    });
+  }
+  await Room.findOneAndUpdate(
+    { _id: { $eq: roomId } },
+    {
+      $set: { status: status },
+    },
+  );
+  return res
+    .status(200)
+    .json({ message: "room updated successfully", status: true });
+}
+
 //  Widget apis
 
 async function fetchRoomTypeWithCounts(req: Request, res: Response) {
@@ -594,6 +619,7 @@ export const fetchRoomTypeDetails = asyncHandler(getRoomTypeDetails);
 export const getRoomStatusById = asyncHandler(getRoomStatusByRoomTypeId);
 export const updateRoomTypeDetails = asyncHandler(updateRoomType);
 export const fetchRoomDetails = asyncHandler(getRoomDetails);
+export const updateRoomStatusHandler = asyncHandler(changeRoomStatus);
 
 export const fetchRoomsForWidget = asyncHandler(fetchRooms);
 export const fetchRoomTypeCounts = asyncHandler(fetchRoomTypeWithCounts);

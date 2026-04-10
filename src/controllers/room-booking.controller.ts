@@ -11,6 +11,7 @@ import { WidgetUser } from "../models/widget-user.model";
 import { sendBookingEmail } from "../utils/send-email";
 import JWTProvider from "../utils/jwt-provider";
 import razorpay from "../utils/razorpay-config";
+import mongoose from "mongoose";
 
 /**
  * Check if a room is available for the given date range
@@ -143,6 +144,107 @@ async function createRoomBooking(req: Request, res: Response) {
   return res.status(201).json({
     success: true,
     message: "Room booking created successfully",
+    data: populatedBooking,
+  });
+}
+
+async function bookRoomById(req: Request, res: Response) {
+  console.log("request body", req.body);
+
+  const hotelId = req.user?.hotelId || req.body.hotelId;
+  const { guestName, phone, email, checkIn, checkOut, guests, roomId } =
+    req.body;
+
+  if (!hotelId) {
+    return res.status(400).json({
+      success: false,
+      message: "Hotel ID is required",
+    });
+  }
+
+  if (!roomId) {
+    return res.status(400).json({
+      success: false,
+      message: "Room ID is required",
+    });
+  }
+
+  // Parse dates
+  const checkInDate = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+
+  // Verify room exists, belongs to hotel, and is available
+  const room = await Room.findOne({
+    _id: roomId,
+    hotelId,
+    status: "available",
+  }).populate({ path: "roomTypeId" });
+
+  if (!room) {
+    return res.status(404).json({
+      success: false,
+      message: "Room not found, not available, or in maintenance",
+    });
+  }
+
+  const roomType = room.roomTypeId as any;
+
+  // Check if number of guests exceeds room capacity
+  if (guests > roomType.maxGuest) {
+    return res.status(400).json({
+      success: false,
+      message: `Room can accommodate maximum ${roomType.maxGuest} guests`,
+    });
+  }
+
+  // Check room availability for the date range
+  const available = await isRoomAvailable(roomId, checkInDate, checkOutDate);
+
+  if (!available) {
+    return res.status(409).json({
+      success: false,
+      message: "Room is not available for the selected dates",
+    });
+  }
+
+  const bookingData = {
+    hotelId,
+    guestName,
+    guestPhone: phone,
+    guestEmail: email,
+    roomId: `${room._id}`,
+    roomTypeId: `${roomType._id}`,
+    checkIn,
+    checkOut,
+    numberOfGuests: guests,
+    pricePerNight: roomType.price,
+  };
+
+  console.log("booking-data", bookingData);
+
+  console.log("Room is available, proceeding to create booking", bookingData);
+
+  // Validate payload
+  const validatePayload = createRoomBookingSchema.safeParse(bookingData);
+  console.log(validatePayload);
+
+  if (!validatePayload.success) {
+    return res.status(400).json(handleZodError(validatePayload.error));
+  }
+
+  const roomBooking = await RoomBooking.create({
+    ...bookingData,
+    status: RoomBookingStatus.CONFIRMED,
+  });
+
+  const populatedBooking = await RoomBooking.findById(roomBooking._id)
+    .populate({ path: "roomId", select: "roomNumber floor images" })
+    .populate({ path: "roomTypeId", select: "type maxGuest price" })
+    .populate({ path: "guestId", select: "name email" });
+
+  return res.status(201).json({
+    success: true,
+    message: "Room booked successfully",
     data: populatedBooking,
   });
 }
@@ -372,7 +474,7 @@ async function cancelRoomBooking(req: Request, res: Response) {
   });
 }
 
-async function bookRoomById(req: Request, res: Response) {
+async function bookRoomByGuestId(req: Request, res: Response) {
   const { roomId, hotelId, checkIn, checkOut, guests, guestId, notes } =
     req.body;
   let orderId = "";
@@ -495,12 +597,55 @@ async function bookRoomById(req: Request, res: Response) {
   });
 }
 
+async function getRoomBookingCount(req: Request, res: Response) {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({
+      status: false,
+      message: "RoomID is required",
+    });
+  }
+  const bookings = await RoomBooking.find({ _id: id });
+
+  const response = await RoomBooking.aggregate([
+    { $match: { roomId: new mongoose.Types.ObjectId(id) } },
+    { $group: { _id: "$status", count: { $sum: 1 } } },
+  ]);
+
+  const allBookings = response.map((booking) => {
+    return { type: booking._id, count: booking.count };
+  });
+
+  const allCategories = [
+    "pending",
+    "confirmed",
+    "checked_in",
+    "checked_out",
+    "cancelled",
+  ];
+  const finalData = allCategories.map((cat) => {
+    const found = allBookings.find((b) => b.type === cat);
+
+    return found ? found : { type: cat, count: 0 };
+  });
+
+  console.log("response", response);
+
+  console.log(bookings);
+  return res.status(200).json({
+    status: true,
+    bookings: finalData,
+  });
+}
+
 export const createRoomBookingHandler = asyncHandler(createRoomBooking);
 export const getRoomBookingsHandler = asyncHandler(getRoomBookings);
 export const getRoomBookingByIdHandler = asyncHandler(getRoomBookingById);
 export const updateRoomBookingHandler = asyncHandler(updateRoomBooking);
 export const cancelRoomBookingHandler = asyncHandler(cancelRoomBooking);
+export const getRoomBookingCountHandler = asyncHandler(getRoomBookingCount);
+export const bookRoomThroughId = asyncHandler(bookRoomById);
 
 //  Widget function//
 
-export const bookRoomThroughId = asyncHandler(bookRoomById);
+export const bookRoomThroughGuestId = asyncHandler(bookRoomByGuestId);
