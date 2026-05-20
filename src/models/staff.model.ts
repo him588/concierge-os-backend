@@ -5,8 +5,6 @@ export interface IStaff extends Document {
   email?: string;
   phone?: string;
   hotelId: Types.ObjectId;
-  isAvailable: boolean; // Simple availability flag
-  isActive: boolean; // Soft delete/disable flag
   password: string;
   createdAt: Date;
   updatedAt: Date;
@@ -39,19 +37,17 @@ const staffSchema = new Schema<IStaff>(
       required: true,
       index: true,
     },
-    isAvailable: {
-      type: Boolean,
-      default: true,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
   },
   { timestamps: true },
 );
 
-// Index for quick availability queries
+staffSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    ret.id = ret._id;
+    delete ret._id;
+  },
+});
+
 staffSchema.index({ hotelId: 1, isAvailable: 1, isActive: 1 });
 
 export const Staff = model<IStaff>("Staff", staffSchema);

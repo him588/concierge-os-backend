@@ -12,5 +12,9 @@ export const updateStaffServiceMappingSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export type CreateStaffServiceMappingInput = z.infer<typeof createStaffServiceMappingSchema>;
-export type UpdateStaffServiceMappingInput = z.infer<typeof updateStaffServiceMappingSchema>;
+export type CreateStaffServiceMappingInput = z.infer<
+  typeof createStaffServiceMappingSchema
+>;
+export type UpdateStaffServiceMappingInput = z.infer<
+  typeof updateStaffServiceMappingSchema
+>;

@@ -8,6 +8,7 @@ import {
 } from "../controllers/booking.controller";
 import { authenticateUser } from "../middlewares/authenticate-user";
 import { isHotelOwner } from "../middlewares/isHotelOwner";
+import { authenticateWidgetUser } from "../middlewares/widget-user";
 
 export const bookingRoute = express.Router();
 
@@ -15,11 +16,9 @@ export const bookingRoute = express.Router();
 bookingRoute.get("/browse", browseServicesHandler);
 
 // Booking creation - can be used by guests or authenticated users
-bookingRoute.post("/", createBookingHandler);
+bookingRoute.post("/", authenticateWidgetUser, createBookingHandler);
 
 // Admin/Owner routes - require authentication
-bookingRoute.use(authenticateUser);
-bookingRoute.use(isHotelOwner);
 
 bookingRoute.get("/", getBookingsHandler);
 bookingRoute.get("/:id", getBookingByIdHandler);

@@ -61,18 +61,11 @@ const serviceItemSchema = new Schema<IServiceItem>(
       required: true,
       index: true,
     },
-
-    // NEW FIELDS
     listingType: {
       type: String,
       enum: Object.values(ListingType),
       default: ListingType.QUANTITY,
       required: true,
-    },
-    maxQuantityPerBooking: {
-      type: Number,
-      min: 1,
-      default: 10, // Default max
     },
   },
   { timestamps: true },
@@ -82,6 +75,13 @@ const serviceItemSchema = new Schema<IServiceItem>(
 serviceItemSchema.pre("save", function (next) {
   this.isFree = this.price === 0;
   next();
+});
+
+serviceItemSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    ret.id = ret._id;
+    delete ret._id;
+  },
 });
 
 // Unique item name per service

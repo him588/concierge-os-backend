@@ -9,6 +9,8 @@ import {
 import { ServiceItem } from "../models/service-item.model";
 import { StaffServiceMapping } from "../models/staff-service-mapping.model";
 import mongoose from "mongoose";
+import { createServiceItemSchema } from "../validators/service-item.validator";
+import { handleZodError } from "../utils/zod-handler";
 
 async function createService(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
@@ -64,6 +66,8 @@ async function createService(req: Request, res: Response) {
 async function getServices(req: Request, res: Response) {
   const { id } = req.query;
   const hotelId = id ? id : req.user?.hotelId;
+  const status = req.query.status;
+  console.log("status", req.query);
 
   if (!hotelId) {
     return res.status(400).json({
@@ -72,7 +76,12 @@ async function getServices(req: Request, res: Response) {
     });
   }
   const findServices = await Service.aggregate([
-    { $match: { hotelId: new mongoose.Types.ObjectId(hotelId.toString()) } },
+    {
+      $match: {
+        hotelId: new mongoose.Types.ObjectId(hotelId.toString()),
+        isActive: status?.toString() === "Active" ? true : false,
+      },
+    },
     {
       $lookup: {
         from: "serviceitems",
@@ -152,94 +161,146 @@ async function getServices(req: Request, res: Response) {
 }
 
 async function getServiceById(req: Request, res: Response) {
+  console.log(req.query.id);
   const { id } = req.params;
-  const hotelId = req.user?.hotelId;
 
-  if (!hotelId) {
+  if (!id) {
     return res.status(400).json({
-      success: false,
-      message: "Hotel ID is required",
+      message: "serviceid is required ",
     });
   }
+  let serviceDetails: {
+    totalRevenue: number;
+    totalBookingsCount: number;
+    canceledBookingsCount: number;
+    staffCount: number;
+    name: string;
+    isActive: boolean;
+  } = {
+    totalRevenue: 0,
+    totalBookingsCount: 0,
+    canceledBookingsCount: 0,
+    staffCount: 0,
+    name: "",
+    isActive: false,
+  };
 
-  const findServices = await Service.aggregate([
-    { $match: { hotelId } },
+  const services = await Service.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(id) },
+    },
     {
       $lookup: {
-        from: "property",
-        localField: "hotelId",
-        foreignField: "_id",
-        as: "property",
+        from: "bookings",
+        localField: "_id",
+        foreignField: "serviceId",
+        as: "totalBookings",
+      },
+    },
+    {
+      $lookup: {
+        from: "staffservicemappings",
+        localField: "_id",
+        foreignField: "serviceId",
+        as: "totalStaff",
+      },
+    },
+    {
+      $addFields: {
+        totalRevenue: {
+          $sum: "$totalBookings.totalAmount",
+        },
+      },
+    },
+    {
+      $addFields: {
+        totalBookingsCount: {
+          $size: "$totalBookings",
+        },
+      },
+    },
+    {
+      $addFields: {
+        canceledBookingsCount: {
+          $size: {
+            $filter: {
+              input: "$totalBookings",
+              as: "booking",
+              cond: { $eq: ["$$booking.status", "cancelled"] },
+            },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        staffCount: {
+          $size: "$totalStaff",
+        },
+      },
+    },
+    {
+      $project: {
+        staffCount: 1,
+        canceledBookingsCount: 1,
+        totalBookingsCount: 1,
+        totalRevenue: 1,
+        name: 1,
+        isActive: 1,
       },
     },
   ]);
-
-  console.log(findServices);
-
-  // const [staff, subServices, service] = await Promise.all([
-  //   StaffServiceMapping.find({ serviceId: id, hotelId })
-  //     .select("-__V -createdAt -updatedAt")
-  //     .populate("staffId"),
-  //   ServiceItem.find({ serviceId: id, hotelId }),
-  //   Service.findOne({ _id: id, hotelId }),
-  // ]);
-
-  // if (!service) {
-  //   return res.status(404).json({
-  //     success: false,
-  //     message: "Service not found",
-  //   });
-  // }
-
-  // const response = {
-  //   serviceName: service?.name,
-  //   color: service?.color,
-  //   serviceId: service?.id,
-  //   staffList: staff || [],
-  //   subServices: subServices || [],
-  // };
-
-  // const service = await Service.findOne({ _id: id, hotelId });
+  if (services.length > 0) {
+    let service = services[0];
+    serviceDetails = {
+      totalRevenue: service.totalRevenue,
+      totalBookingsCount: service.totalBookingsCount,
+      canceledBookingsCount: service.canceledBookingsCount,
+      staffCount: service.staffCount,
+      name: service.name,
+      isActive: service.isActive,
+    };
+  }
 
   return res.status(200).json({
-    success: true,
-    message: "Service fetched successfully",
+    status: "success",
+    service: serviceDetails,
   });
 }
 
 async function updateService(req: Request, res: Response) {
-  const { id } = req.params;
-  const hotelId = req.user?.hotelId;
-
-  if (!hotelId) {
+  const { id, markActive } = req.body;
+  console.log(req.body);
+  if (!id) {
     return res.status(401).json({
       success: false,
-      message: "Hotel ID is required",
+      message: "room is required to uddate service",
     });
   }
 
-  const updateData = updateServiceSchema.parse(req.body);
+  if (typeof markActive !== "boolean") {
+    return res.status(401).json({
+      success: false,
+      message: "status of service should be boolean",
+    });
+  }
+
+  const updateService = await Service.findByIdAndUpdate(
+    id,
+    { isActive: markActive },
+    { new: true },
+  );
+
+  if (updateService) {
+  } else {
+  }
 
   // If updating name, check for duplicates
-  if (updateData.name) {
-    const existingService = await Service.findOne({
-      _id: { $ne: id },
-      hotelId,
-      name: updateData.name,
-    });
-
-    if (existingService) {
-      return res.status(409).json({
-        success: false,
-        message: "Service with this name already exists for this hotel",
-      });
-    }
-  }
 
   const service = await Service.findOneAndUpdate(
-    { _id: id, hotelId },
-    { $set: updateData },
-    { new: true, runValidators: true },
+    { _id: id },
+    { $set: { isActive: markActive } },
+    { new: true },
   );
 
   if (!service) {
@@ -287,8 +348,43 @@ async function deleteService(req: Request, res: Response) {
   });
 }
 
+async function getServiceDetails(req: Request, res: Response) {
+  const { id } = req.query;
+  const hotelId = req.user?.hotelId;
+
+  if (!id) {
+    return res.status(400).json({
+      message: "serviceid is required ",
+    });
+  }
+  const service = Service.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(id.toString()) },
+    },
+    {
+      $lookup: {
+        from: "serviceitems",
+        foreignField: "",
+        localField: "",
+        as: "serviceItem",
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalRevenue: { $sum: "$totalamount" },
+      },
+    },
+  ]);
+  return res.status(200).json({
+    status: "success",
+    service,
+  });
+}
+
 export const createServiceHandler = asyncHandler(createService);
 export const getServicesHandler = asyncHandler(getServices);
 export const getServiceByIdHandler = asyncHandler(getServiceById);
 export const updateServiceHandler = asyncHandler(updateService);
 export const deleteServiceHandler = asyncHandler(deleteService);
+export const getBookingDetails = asyncHandler(getServiceDetails);

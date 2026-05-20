@@ -106,6 +106,13 @@ const roomBookingSchema = new Schema<IRoomBooking>(
   { timestamps: true },
 );
 
+roomBookingSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    ret.id = ret._id;
+    delete ret._id;
+  },
+});
+
 // Pre-save hook to calculate totalNights and totalAmount
 roomBookingSchema.pre("validate", function (next) {
   if (this.checkIn && this.checkOut) {

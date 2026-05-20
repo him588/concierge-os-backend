@@ -15,6 +15,6 @@ staffServiceMappingRoute.use(authenticateUser);
 staffServiceMappingRoute.use(isHotelOwner);
 
 staffServiceMappingRoute.post("/", createStaffServiceMappingHandler);
-staffServiceMappingRoute.get("/", getStaffServiceMappingsHandler);
+staffServiceMappingRoute.get("/:id", getStaffServiceMappingsHandler);
 staffServiceMappingRoute.put("/:id", updateStaffServiceMappingHandler);
 staffServiceMappingRoute.delete("/:id", deleteStaffServiceMappingHandler);

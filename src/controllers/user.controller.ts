@@ -12,6 +12,7 @@ import { Property } from "../models/property.model";
 import { registerWidgetUserSchema } from "../validators/widget.validator";
 import { handleZodError } from "../utils/zod-handler";
 import { WidgetUser } from "../models/widget-user.model";
+import mongoose from "mongoose";
 
 export async function RegisterUser(req: Request, res: Response) {
   const { name, email, password } = req.body;
@@ -70,7 +71,7 @@ export async function VerifyUser(req: Request, res: Response) {
     return res.status(409).json({ message: "something went wrong" });
   }
   if (isExist) {
-    if (isExist.otp === +otp) {
+    if (isExist.otp.toString().slice(0, 4) === otp) {
       const accessToken = JWTProvider.generateAccessToken({
         userId,
         email: isExist.email!,
@@ -441,7 +442,81 @@ async function logoutWidgetUser(req: Request, res: Response) {
   });
 }
 
+async function getWidgetuserdetails(req: Request, res: Response) {
+  const userId = req.user?.userId;
+  if (!userId) {
+    return res.status(400).json({
+      status: false,
+      message: "UserId is required to proceed furthur",
+    });
+  }
+
+  const findUser = await WidgetUser.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(userId) },
+    },
+    {
+      $lookup: {
+        from: "roombookings",
+        foreignField: "guestId",
+        localField: "_id",
+        as: "totalRoomBookings",
+      },
+    },
+    {
+      $lookup: {
+        from: "bookings",
+        foreignField: "guestId",
+        localField: "_id",
+        as: "totalServiceBookings",
+      },
+    },
+    {
+      $addFields: {
+        totalRoomSpending: {
+          $sum: "$totalRoomBookings.totalAmount",
+        },
+        totalServiceSpending: {
+          $sum: "$totalServiceBookings.totalAmount",
+        },
+        totalNights: {
+          $sum: "$totalRoomBookings.totalNights",
+        },
+        totalRoomBooked: {
+          $size: "$totalRoomBookings",
+        },
+        totalServicesBooked: {
+          $size: "$totalServiceBookings",
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        name: 1,
+        email: 1,
+        totalRoomSpending: 1,
+        totalServiceSpending: 1,
+        totalRoomBooked: 1,
+        totalServicesBooked: 1,
+        totalNights: 1,
+      },
+    },
+  ]);
+  if (findUser[0]) {
+    return res.status(200).json({
+      userDetails: findUser[0],
+      status: true,
+    });
+  }
+  return res.status(400).json({
+    status: false,
+    message: "User doesn't exist",
+  });
+}
+
 export const getUserDetails = asyncHandler(userDetails);
 export const registerWidgetUserHandler = asyncHandler(registerWidgetUser);
 export const loginWidgetUserHandler = asyncHandler(loginWidgetUser);
 export const logoutWidgetUserHandler = asyncHandler(logoutWidgetUser);
+export const getWidgetUserHandler = asyncHandler(getWidgetuserdetails);

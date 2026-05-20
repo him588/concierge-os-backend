@@ -10,8 +10,10 @@ import {
   registerWidgetUserHandler,
   loginWidgetUserHandler,
   logoutWidgetUserHandler,
+  getWidgetUserHandler,
 } from "../controllers/user.controller";
 import { authenticateUser } from "../middlewares/authenticate-user";
+import { authenticateWidgetUser } from "../middlewares/widget-user";
 
 const authRouter = express.Router();
 
@@ -25,5 +27,7 @@ authRouter.get("/userDetails", authenticateUser, getUserDetails);
 authRouter.post("/registerWidgetUser", registerWidgetUserHandler);
 authRouter.post("/loginWidgetUser", loginWidgetUserHandler);
 authRouter.post("/logoutWidgetUser", logoutWidgetUserHandler);
+
+authRouter.get("/widget-user", authenticateWidgetUser, getWidgetUserHandler);
 
 export default authRouter;

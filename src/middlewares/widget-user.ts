@@ -7,6 +7,7 @@ export async function authenticateWidgetUser(
   res: Response,
   next: NextFunction,
 ) {
+  console.log("Authenticating widget user...");
   const { headers } = req;
   console.log(headers);
   const token = headers.authorization;
@@ -25,6 +26,7 @@ export async function authenticateWidgetUser(
         email,
         role,
       };
+      console.log("Passed middle ware test");
       next();
     } catch (error) {
       console.log("Error while user middleware", error);

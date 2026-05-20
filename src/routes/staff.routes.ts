@@ -2,9 +2,8 @@ import express from "express";
 import {
   createStaffHandler,
   getStaffHandler,
-  getStaffByIdHandler,
-  updateStaffHandler,
   deleteStaffHandler,
+  fetchStaffListHandler,
 } from "../controllers/staff.controller";
 import { authenticateUser } from "../middlewares/authenticate-user";
 import { isHotelOwner } from "../middlewares/isHotelOwner";
@@ -17,6 +16,6 @@ staffRoute.use(isHotelOwner);
 
 staffRoute.post("/", createStaffHandler);
 staffRoute.get("/", getStaffHandler);
-staffRoute.get("/:id", getStaffByIdHandler);
-staffRoute.put("/:id", updateStaffHandler);
+staffRoute.get("/staff-list", fetchStaffListHandler);
+
 staffRoute.delete("/:id", deleteStaffHandler);

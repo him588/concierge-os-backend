@@ -14,6 +14,15 @@ async function registerProperty(req: Request, res: Response) {
   }
   const details = req.body.propertyDetails;
 
+  if (!details) {
+    return res.status(400).json({
+      message: "Property details is required to create property",
+      status: false,
+    });
+  }
+
+  console.log("propery details  line no 26", details);
+
   const propertyData = {
     ownedBy: req.user.userId,
     name: details.name,

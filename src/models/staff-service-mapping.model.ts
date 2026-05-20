@@ -1,12 +1,11 @@
 import mongoose, { Schema, model, Document, Types } from "mongoose";
 
-// Many-to-many relationship: Staff <-> Service
-// This determines which staff can handle which services
 export interface IStaffServiceMapping extends Document {
   staffId: Types.ObjectId;
   serviceId: Types.ObjectId;
-  hotelId: Types.ObjectId; // Denormalized for quick queries
-  isActive: boolean; // Can disable mapping without deleting
+  hotelId: Types.ObjectId;
+  isActive: boolean;
+  serviceCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,14 +34,24 @@ const staffServiceMappingSchema = new Schema<IStaffServiceMapping>(
       type: Boolean,
       default: true,
     },
+    serviceCount: {
+      type: Number,
+      require: true,
+      default: 0,
+    },
   },
   { timestamps: true },
 );
 
-// Unique constraint: one staff can be mapped to one service only once
-staffServiceMappingSchema.index({ staffId: 1, serviceId: 1 }, { unique: true });
+staffServiceMappingSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    ret.id = ret._id;
+    delete ret._id;
+  },
+});
 
-// Index for querying available staff for a service
+staffServiceMappingSchema.index({ staffId: 1, serviceId: 1 });
+
 staffServiceMappingSchema.index({ serviceId: 1, isActive: 1 });
 staffServiceMappingSchema.index({ staffId: 1, isActive: 1 });
 

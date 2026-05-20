@@ -7,8 +7,10 @@ import {
   updateServiceItemSchema,
 } from "../validators/service-item.validator";
 import { ZodError } from "zod";
+import { handleZodError } from "../utils/zod-handler";
 
 async function createServiceItem(req: Request, res: Response) {
+  console.log("create sercice item playload");
   const hotelId = req.user?.hotelId;
 
   if (!hotelId) {
@@ -18,18 +20,21 @@ async function createServiceItem(req: Request, res: Response) {
     });
   }
 
-  const itemData = {
+  console.log(req.body.name);
+  const validatePayload = createServiceItemSchema.safeParse({
     ...req.body,
     hotelId,
-  };
-
-  createServiceItemSchema.parse(itemData);
+  });
+  console.log("validated payload", validatePayload.data);
+  if (!validatePayload.success) {
+    const error = handleZodError(validatePayload.error);
+    return res.status(400).json({ status: false, message: error });
+  }
 
   // Verify service exists and belongs to hotel
   const service = await Service.findOne({
-    _id: itemData.serviceId,
+    _id: validatePayload.data.serviceId,
     hotelId,
-    isActive: true,
   });
 
   if (!service) {
@@ -41,8 +46,8 @@ async function createServiceItem(req: Request, res: Response) {
 
   // Check for duplicate item name in same service
   const existingItem = await ServiceItem.findOne({
-    serviceId: itemData.serviceId,
-    name: itemData.name,
+    serviceId: validatePayload.data.serviceId,
+    name: validatePayload.data.name,
   });
 
   if (existingItem) {
@@ -52,7 +57,7 @@ async function createServiceItem(req: Request, res: Response) {
     });
   }
 
-  const serviceItem = await ServiceItem.create(itemData);
+  const serviceItem = await ServiceItem.create(validatePayload.data);
 
   return res.status(201).json({
     success: true,
@@ -63,12 +68,20 @@ async function createServiceItem(req: Request, res: Response) {
 
 async function getServiceItems(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
-  const { serviceId, isAvailable } = req.query;
+  const { serviceItem: serviceId } = req.query;
+  console.log("serviceId", serviceId);
 
   if (!hotelId) {
-    return res.status(401).json({
+    return res.status(400).json({
       success: false,
       message: "Hotel ID is required",
+    });
+  }
+
+  if (!serviceId) {
+    return res.status(400).json({
+      success: false,
+      message: "Service ID is required",
     });
   }
 
@@ -78,9 +91,7 @@ async function getServiceItems(req: Request, res: Response) {
     filter.serviceId = serviceId;
   }
 
-  if (isAvailable !== undefined) {
-    filter.isAvailable = isAvailable === "true";
-  }
+  console.log({ filter });
 
   const items = await ServiceItem.find(filter)
     .populate({
@@ -88,12 +99,12 @@ async function getServiceItems(req: Request, res: Response) {
       select: "name description",
     })
     .sort({ createdAt: -1 })
-    .select("-__v");
+    .select("-__v -createdAt -updatedAt -hotelId -serviceId");
 
   return res.status(200).json({
     success: true,
     message: "Service items fetched successfully",
-    data: items,
+    subServices: items,
   });
 }
 
@@ -137,37 +148,22 @@ async function updateServiceItem(req: Request, res: Response) {
       message: "Hotel ID is required",
     });
   }
-
-  const updateData = updateServiceItemSchema.parse(req.body);
-
-  // If updating name, check for duplicates
-  if (updateData.name) {
-    const existingItem = await ServiceItem.findOne({
-      _id: { $ne: id },
-      serviceId: (await ServiceItem.findById(id))?.serviceId,
-      name: updateData.name,
+  if (!id) {
+    return res.status(401).json({
+      success: false,
+      message: "Service item id is required",
     });
-
-    if (existingItem) {
-      return res.status(409).json({
-        success: false,
-        message: "Service item with this name already exists for this service",
-      });
-    }
   }
-
-  // Recompute isFree if price is being updated
-  if (updateData.price !== undefined) {
-    updateData.isAutoIncluded = updateData.price === 0;
-    // If price > 0, isAutoIncluded must be false
-    if (updateData.price > 0) {
-      updateData.isAutoIncluded = false;
-    }
+  const { markUnavailable } = req.body;
+  if (typeof markUnavailable !== "boolean") {
+    return res.status(400).json({
+      message: "Required boolean value for markunavailabe",
+    });
   }
 
   const item = await ServiceItem.findOneAndUpdate(
     { _id: id, hotelId },
-    { $set: updateData },
+    { $set: { isAvailable: markUnavailable } },
     { new: true, runValidators: true },
   );
 
@@ -197,18 +193,7 @@ async function deleteServiceItem(req: Request, res: Response) {
   }
 
   // Soft delete by setting isAvailable to false
-  const item = await ServiceItem.findOneAndUpdate(
-    { _id: id, hotelId },
-    { $set: { isAvailable: false } },
-    { new: true },
-  );
-
-  if (!item) {
-    return res.status(404).json({
-      success: false,
-      message: "Service item not found",
-    });
-  }
+  const item = await ServiceItem.findOneAndDelete({ _id: id, hotelId });
 
   return res.status(200).json({
     success: true,

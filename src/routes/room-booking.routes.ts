@@ -8,18 +8,16 @@ import {
   bookRoomThroughGuestId,
   getRoomBookingCountHandler,
   bookRoomThroughId,
+  getUpcomingBookingsHandler,
+  getBookingsHandler,
 } from "../controllers/room-booking.controller";
-import { authenticateUser } from "../middlewares/authenticate-user";
-import { isHotelOwner } from "../middlewares/isHotelOwner";
 
 export const roomBookingRoute = express.Router();
 
 // Room booking creation - can be used by guests or authenticated users
 roomBookingRoute.post("/book-room", bookRoomThroughGuestId);
-
-// Admin/Owner routes - require authentication
-roomBookingRoute.use(authenticateUser);
-roomBookingRoute.use(isHotelOwner);
+roomBookingRoute.get("/get-bookings/upcoming", getUpcomingBookingsHandler);
+roomBookingRoute.get("/get-bookings", getBookingsHandler);
 
 roomBookingRoute.get("/get-booking-count/:id", getRoomBookingCountHandler);
 roomBookingRoute.post("/", createRoomBookingHandler);

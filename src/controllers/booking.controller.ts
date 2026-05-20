@@ -9,6 +9,8 @@ import {
   updateBookingSchema,
 } from "../validators/booking.validator";
 import { Service } from "../models/service.model";
+import { RoomBooking, RoomBookingStatus } from "../models/room-booking.model";
+import { ServiceBookingPayload } from "../types/type";
 
 /**
  * Helper function to automatically assign staff to a booking
@@ -41,82 +43,103 @@ async function assignStaffToBooking(serviceId: string, hotelId: string) {
 }
 
 async function createBooking(req: Request, res: Response) {
-  const hotelId = req.user?.hotelId || req.body.hotelId;
+  const { hotelId, roomBookingId, serviceList } = req.body;
+  const guestId = req?.user?.userId;
 
-  if (!hotelId) {
-    return res.status(401).json({
+  if (!hotelId || !roomBookingId || !serviceList || !guestId) {
+    return res.status(400).json({
       success: false,
-      message: "Hotel ID is required",
+      message: "Hotel ID, Room Booking ID, and Services List are required",
     });
   }
 
-  // For guest bookings, guestId comes from body
-  // For authenticated users, could come from req.user
-  const bookingData = {
-    ...req.body,
-    hotelId,
-  };
-
-  createBookingSchema.parse(bookingData);
-
-  // Verify service item exists and is available
-  const serviceItem = await ServiceItem.findOne({
-    _id: bookingData.serviceItemId,
-    hotelId,
-    isAvailable: true,
-  }).populate({ path: "serviceId" });
-
-  if (!serviceItem) {
-    return res.status(404).json({
-      success: false,
-      message: "Service item not found or unavailable",
-    });
-  }
-
-  // Get price at time of booking
-  const price = serviceItem.price;
-  const totalAmount = price * bookingData.quantity;
-
-  // Auto-assign staff based on service
-  const assignedStaffId = await assignStaffToBooking(
-    serviceItem.serviceId._id.toString(),
-    hotelId,
-  );
-
-  // Parse scheduledAt if provided
-  let scheduledAt: Date | undefined;
-  if (bookingData.scheduledAt && bookingData.scheduledAt.trim() !== "") {
-    scheduledAt = new Date(bookingData.scheduledAt);
-    if (isNaN(scheduledAt.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid scheduledAt date format",
-      });
-    }
-  }
-
-  const booking = await Booking.create({
-    ...bookingData,
-    serviceId: serviceItem.serviceId._id,
-    price,
-    totalAmount,
-    assignedStaffId: assignedStaffId || undefined,
-    status: assignedStaffId ? BookingStatus.CONFIRMED : BookingStatus.PENDING,
-    scheduledAt,
+  const checkIsBookingValid = await RoomBooking.findOne({
+    _id: roomBookingId,
+    status: {
+      $in: [RoomBookingStatus.CHECKED_IN, RoomBookingStatus.CONFIRMED],
+    },
   });
 
-  const populatedBooking = await Booking.findById(booking._id)
-    .populate({ path: "serviceItemId", select: "name price" })
-    .populate({ path: "serviceId", select: "name" })
-    .populate({ path: "assignedStaffId", select: "name" })
-    .populate({ path: "guestId", select: "name email" });
+  if (!checkIsBookingValid) {
+    return res.status(400).json({
+      status: false,
+      message: "Your Room Booking is not longer valid",
+    });
+  }
+  const results = await Promise.all(
+    serviceList.map(async (item: ServiceBookingPayload) => {
+      try {
+        const service = await ServiceItem.findById(item.itemId);
 
-  return res.status(201).json({
+        if (!service) {
+          return { type: "unprocessed", item };
+        }
+
+        const existing = await Booking.findOne({
+          serviceItemId: item.itemId,
+          status: { $in: [BookingStatus.CONFIRMED, BookingStatus.PENDING] },
+          roomBookingId: roomBookingId,
+        });
+
+        if (existing) {
+          return { type: "unprocessed", item };
+        }
+
+        const entry: any = {
+          hotelId,
+          guestId,
+          roomId: checkIsBookingValid.roomId.toString(),
+          serviceItemId: item.itemId,
+          serviceId: item.serviceId,
+          price: service.price,
+          totalAmount: item.quantity * service.price,
+          status: service.isFree
+            ? BookingStatus.CONFIRMED
+            : BookingStatus.PENDING,
+          requestedAt: new Date(),
+          roomBookingId: roomBookingId,
+          name: item.name,
+          isFree: item.isFree,
+        };
+
+        if (item.listeningType === "person") {
+          entry.person = item.quantity;
+        } else {
+          entry.quantity = item.quantity;
+        }
+
+        const validateEntry = createBookingSchema.safeParse(entry);
+
+        if (!validateEntry.success) {
+          console.log("Validation error:", validateEntry.error);
+          return { type: "unprocessed", item };
+        }
+
+        return { type: "processed", data: entry };
+      } catch (error) {
+        return { type: "unprocessed", item };
+      }
+    }),
+  );
+
+  const processedServiceQue = results
+    .filter((r) => r.type === "processed")
+    .map((r) => r.data);
+
+  const unProcessedServiceQue = results
+    .filter((r) => r.type === "unprocessed")
+    .map((r) => r.item);
+
+  if (processedServiceQue.length > 0) {
+    const createBooking = await Booking.insertMany(processedServiceQue);
+    console.log("all created booking", createBooking);
+  }
+
+  return res.status(200).json({
     success: true,
-    message: assignedStaffId
-      ? "Booking created and staff assigned successfully"
-      : "Booking created. Staff will be assigned when available.",
-    data: populatedBooking,
+    message: `Booking processed successfully. ${processedServiceQue.length} out of ${processedServiceQue.length + unProcessedServiceQue.length} services were booked.`,
+    proccessedItem: processedServiceQue,
+    unproccessedItem: unProcessedServiceQue,
   });
 }
 

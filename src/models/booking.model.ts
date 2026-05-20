@@ -12,9 +12,11 @@ export interface IBooking extends Document {
   hotelId: Types.ObjectId;
   guestId: Types.ObjectId; // Reference to User with role "guest"
   roomId?: Types.ObjectId; // Optional room booking
+  roomBookingId: Types.ObjectId;
   serviceItemId: Types.ObjectId; // Always at item level, never service level
   serviceId: Types.ObjectId; // Denormalized for quick queries
-  quantity: number;
+  quantity?: number;
+  person?: number;
   price: number; // Price at time of booking (for historical accuracy)
   totalAmount: number; // quantity * price
   assignedStaffId?: Types.ObjectId; // Auto-assigned staff
@@ -34,6 +36,11 @@ const bookingSchema = new Schema<IBooking>(
       ref: "Property",
       required: true,
       index: true,
+    },
+    roomBookingId: {
+      type: Schema.Types.ObjectId,
+      ref: "RoomBooking",
+      required: true,
     },
     guestId: {
       type: Schema.Types.ObjectId,

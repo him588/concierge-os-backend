@@ -20,3 +20,19 @@ export type PaymentPayload = {
   services?: [{ sevicesBookingId?: string; seviceName: string }];
   orderId: string;
 };
+
+export type ServiceBookingPayload = {
+  serviceId: string;
+  itemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  isFree: boolean;
+  listeningType: "quantity" | "person";
+};
+
+export interface BookingCell {
+  label: string;
+  sublabel?: string;
+  bookings: number; // raw count, not a percentage
+}

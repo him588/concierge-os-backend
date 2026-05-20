@@ -226,3 +226,123 @@ export function sendConfirmedBookingEmail(
     }
   });
 }
+
+// ✅ NEW: Send warning email at 2 hours
+export function sendScheduledBookingWarning(
+  directory: string,
+  fileName: string,
+  senderEmail: string,
+  receiverEmail: string,
+  subject: string,
+  propertyName: string,
+  year: string,
+  city: string,
+  state: string,
+  bookingId: string,
+  guestName: string,
+  serviceName: string,
+  scheduledAt: string,
+  supportEmail: string,
+  supportPhone: string,
+) {
+  const htmlPath = path.join(__dirname, directory, fileName);
+  let htmlContent = fs.readFileSync(htmlPath, "utf8");
+
+  const data = {
+    propertyName,
+    year,
+    city,
+    state,
+    bookingId,
+    guestName,
+    serviceName,
+    scheduledAt,
+    supportEmail,
+    supportPhone,
+  };
+
+  htmlContent = fillTemplate(htmlContent, data);
+
+  const transporter = createTransport({
+    service: "Gmail",
+    auth: {
+      user: senderEmail,
+      pass: "lmui cymr byrk itcu",
+    },
+  });
+
+  const mailOptions = {
+    from: senderEmail,
+    to: receiverEmail,
+    subject: subject,
+    html: htmlContent,
+  };
+
+  transporter.sendMail(mailOptions, function (error, info) {
+    if (error) {
+      console.error(error);
+    } else {
+      console.log("Email sent: " + info.response);
+    }
+  });
+}
+
+// ✅ NEW: Send cancellation email at 3 hours
+export function sendScheduledBookingCancelled(
+  directory: string,
+  fileName: string,
+  senderEmail: string,
+  receiverEmail: string,
+  subject: string,
+  propertyName: string,
+  year: string,
+  city: string,
+  state: string,
+  bookingId: string,
+  guestName: string,
+  serviceName: string,
+  scheduledAt: string,
+  supportEmail: string,
+  supportPhone: string,
+) {
+  const htmlPath = path.join(__dirname, directory, fileName);
+  let htmlContent = fs.readFileSync(htmlPath, "utf8");
+
+  const data = {
+    propertyName,
+    year,
+    city,
+    state,
+    bookingId,
+    guestName,
+    serviceName,
+    scheduledAt,
+    supportEmail,
+    supportPhone,
+  };
+
+  htmlContent = fillTemplate(htmlContent, data);
+
+  const transporter = createTransport({
+    service: "Gmail",
+    auth: {
+      user: senderEmail,
+      pass: "lmui cymr byrk itcu",
+    },
+  });
+
+  const mailOptions = {
+    from: senderEmail,
+    to: receiverEmail,
+    subject: subject,
+    html: htmlContent,
+  };
+
+  transporter.sendMail(mailOptions, function (error, info) {
+    if (error) {
+      console.error(error);
+    } else {
+      console.log("Email sent: " + info.response);
+    }
+  });
+}

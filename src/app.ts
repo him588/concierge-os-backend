@@ -21,7 +21,11 @@ import { overviewRoute } from "./routes/overview.routes";
 import { authenticateWidgetUser } from "./middlewares/widget-user";
 import { isHotelOwner } from "./middlewares/isHotelOwner";
 import { paymentRoute } from "./routes/payment.route";
-import { startBookingCron } from "./jobs/booking";
+import {
+  cancelBookingCron,
+  sendWarningCron,
+  startBookingCron,
+} from "./jobs/booking";
 
 const app = express();
 
@@ -87,9 +91,12 @@ app.use("/widget/property", propertyRoute);
 app.use("/widget/room", roomRoute);
 app.use("/widget/room-booking", authenticateWidgetUser, roomBookingRoute);
 app.use("/widget/services", authenticateWidgetUser, serviceRoute);
+app.use("/widget/book-service", authenticateWidgetUser, bookingRoute);
 
 // Start cron jobs
-startBookingCron();
+// startBookingCron();
+cancelBookingCron();
+sendWarningCron();
 
 /* 404 Handler */
 app.use((req: Request, res: Response) => {

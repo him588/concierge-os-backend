@@ -7,6 +7,7 @@ import {
   createStaffServiceMappingSchema,
   updateStaffServiceMappingSchema,
 } from "../validators/staff-service-mapping.validator";
+import mongoose from "mongoose";
 
 async function createStaffServiceMapping(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
@@ -29,7 +30,6 @@ async function createStaffServiceMapping(req: Request, res: Response) {
   const staff = await Staff.findOne({
     _id: mappingData.staffId,
     hotelId,
-    isActive: true,
   });
 
   if (!staff) {
@@ -43,7 +43,6 @@ async function createStaffServiceMapping(req: Request, res: Response) {
   const service = await Service.findOne({
     _id: mappingData.serviceId,
     hotelId,
-    isActive: true,
   });
 
   if (!service) {
@@ -78,6 +77,13 @@ async function createStaffServiceMapping(req: Request, res: Response) {
   }
 
   const mapping = await StaffServiceMapping.create(mappingData);
+  await StaffServiceMapping.updateMany(
+    {
+      hotelId,
+      serviceId: mappingData.serviceId,
+    },
+    { $set: { serviceCount: 0 } },
+  );
 
   const populatedMapping = await StaffServiceMapping.findById(mapping._id)
     .populate({ path: "staffId", select: "name email" })
@@ -92,7 +98,7 @@ async function createStaffServiceMapping(req: Request, res: Response) {
 
 async function getStaffServiceMappings(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
-  const { staffId, serviceId, isActive } = req.query;
+  const { id } = req.params;
 
   if (!hotelId) {
     return res.status(401).json({
@@ -100,26 +106,22 @@ async function getStaffServiceMappings(req: Request, res: Response) {
       message: "Hotel ID is required",
     });
   }
-
-  const filter: any = { hotelId };
-
-  if (staffId) {
-    filter.staffId = staffId;
+  if (!id) {
+    return res.status(401).json({
+      success: false,
+      message: "Service ID is required",
+    });
   }
 
-  if (serviceId) {
-    filter.serviceId = serviceId;
-  }
-
-  if (isActive !== undefined) {
-    filter.isActive = isActive === "true";
-  }
-
-  const mappings = await StaffServiceMapping.find(filter)
+  const mappings = await StaffServiceMapping.find({
+    serviceId: new mongoose.Types.ObjectId(id),
+  })
     .populate({ path: "staffId", select: "name email isAvailable" })
     .populate({ path: "serviceId", select: "name description" })
     .sort({ createdAt: -1 })
     .select("-__v");
+
+  console.log("staff linked to service", mappings);
 
   return res.status(200).json({
     success: true,
@@ -164,8 +166,14 @@ async function updateStaffServiceMapping(req: Request, res: Response) {
 }
 
 async function deleteStaffServiceMapping(req: Request, res: Response) {
-  const { id } = req.params;
+  const { staffId, serviceId } = req.query;
   const hotelId = req.user?.hotelId;
+  if (!staffId || !serviceId) {
+    return res.status(400).json({
+      success: false,
+      message: "Staff ID and Service ID are required",
+    });
+  }
 
   if (!hotelId) {
     return res.status(401).json({
@@ -175,11 +183,11 @@ async function deleteStaffServiceMapping(req: Request, res: Response) {
   }
 
   // Soft delete by setting isActive to false
-  const mapping = await StaffServiceMapping.findOneAndUpdate(
-    { _id: id, hotelId },
-    { $set: { isActive: false } },
-    { new: true },
-  );
+  const mapping = await StaffServiceMapping.deleteOne({
+    staffId,
+    serviceId,
+    hotelId,
+  });
 
   if (!mapping) {
     return res.status(404).json({

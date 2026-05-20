@@ -638,6 +638,193 @@ async function getRoomBookingCount(req: Request, res: Response) {
   });
 }
 
+async function getRoomBookingsByStatus(req: Request, res: Response) {
+  const { pageSize, status, currentPage, search, roomId } = req.query;
+  const availStatus = [
+    "pending",
+    "confirmed",
+    "checked_in",
+    "checked_out",
+    "cancelled",
+  ];
+
+  if (!roomId) {
+    return res.status(400);
+  }
+
+  if (status && !availStatus.includes(status as string)) {
+    return res.status(400).json({
+      status: false,
+      message: "Invalid status provided",
+    });
+  }
+
+  const page = parseInt(currentPage as string) || 1;
+  const limit = parseInt(pageSize as string) || 10;
+  const skip = (page - 1) * limit;
+
+  const query: Record<string, any> = {};
+
+  if (status) {
+    query.status = status;
+  }
+
+  query.roomId = roomId;
+
+  if (search && (search as string).trim() !== "") {
+    const searchRegex = new RegExp(search as string, "i");
+
+    const matchingGuests = await WidgetUser.find({
+      $or: [{ name: searchRegex }, { email: searchRegex }],
+    }).select("_id");
+
+    const guestIds = matchingGuests.map((g) => g._id);
+
+    query.$or = [
+      { guestEmail: searchRegex },
+      { guestName: searchRegex },
+      ...(guestIds.length > 0 ? [{ guestId: { $in: guestIds } }] : []),
+    ];
+  }
+
+  const [bookings, total] = await Promise.all([
+    RoomBooking.find(query)
+      .populate("guestId", "name email")
+      .populate("roomId", "roomNumber")
+      .populate("roomTypeId", "name")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    RoomBooking.countDocuments(query),
+  ]);
+
+  return res.status(200).json({
+    status: true,
+    message: "Bookings fetched successfully",
+    data: bookings,
+    pagination: {
+      total,
+      currentPage: page,
+      pageSize: limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
+}
+
+async function getUpcomingBoookings(req: Request, res: Response) {
+  const { hotelId } = req.query;
+  const { userId: guestId } = req.user || {};
+  const currentDate = new Date();
+  console.log("Guest ID:", guestId, "Hotel ID:", hotelId);
+  if (!guestId || !hotelId) {
+    return res.status(400).json({
+      status: false,
+      message: "GuestID and HotelID are required",
+    });
+  }
+  const bookings = await RoomBooking.find({
+    guestId,
+    hotelId,
+    status: {
+      $in: [RoomBookingStatus.CONFIRMED, RoomBookingStatus.CHECKED_IN],
+    },
+    checkIn: { $gte: currentDate },
+  })
+    .populate({ path: "roomId", select: "_id floor roomNumber" })
+    .select("checkIn checkOut totalAmount bookingId:$_id roomId")
+    .lean();
+  return res.status(200).json({
+    status: true,
+    message: "Guest bookings fetched successfully",
+    bookings: bookings,
+  });
+}
+
+async function getBookings(req: Request, res: Response) {
+  console.log("Api working successfully");
+  const { status, hotelId, pageSize, offSet } = req.query;
+  const { userId: guestId } = req.user || {};
+  const bookingStatuses = ["Previous", "UpComing", "All"];
+  console.log(req.query);
+  console.log("guestId", guestId);
+
+  if (!status || !guestId || !hotelId || !pageSize || !offSet) {
+    return res.status(400).json({
+      status: false,
+      message: "Bad payload",
+    });
+  }
+
+  if (typeof status !== "string" || !bookingStatuses.includes(status)) {
+    return res.status(400).json({
+      status: false,
+      message: "Invalid status value",
+    });
+  }
+
+  let query: any = {};
+  query.hotelId = new mongoose.Types.ObjectId(hotelId as string);
+  query.guestId = new mongoose.Types.ObjectId(guestId);
+
+  if (status === "UpComing") {
+    const date = new Date();
+    query.checkIn = { $gte: date };
+  }
+  if (status === "Previous") {
+    const date = new Date();
+    query.checkIn = { $lte: date };
+  }
+
+  const bookings = await RoomBooking.aggregate([
+    {
+      $match: query,
+    },
+    {
+      $lookup: {
+        from: "roomtypes",
+        foreignField: "_id",
+        localField: "roomTypeId",
+        as: "roomDetails",
+      },
+    },
+    {
+      $project: {
+        bookingId: "$_id",
+        totalPrice: "$totalAmount",
+        checkIn: "$checkIn",
+        checkOut: "$checkOut",
+        status: "$status",
+        totalGuests: "$numberOfGuests",
+        totalNights: "$totalNights",
+        roomName: { $arrayElemAt: ["$roomDetails.type", 0] },
+        daysLeft: {
+          $dateDiff: {
+            startDate: new Date(),
+            endDate: "$checkIn",
+            unit: "day",
+          },
+        },
+        _id: 0,
+      },
+    },
+    {
+      $skip: +offSet,
+    },
+    {
+      $limit: +pageSize,
+    },
+  ]);
+  const totalBookings = await RoomBooking.countDocuments(query);
+  const totalPages = Math.ceil(totalBookings / Number(pageSize));
+
+  return res.status(200).json({
+    roomBookings: bookings,
+    totalBookings,
+    totalPages,
+    status: true,
+  });
+}
+
 export const createRoomBookingHandler = asyncHandler(createRoomBooking);
 export const getRoomBookingsHandler = asyncHandler(getRoomBookings);
 export const getRoomBookingByIdHandler = asyncHandler(getRoomBookingById);
@@ -645,7 +832,10 @@ export const updateRoomBookingHandler = asyncHandler(updateRoomBooking);
 export const cancelRoomBookingHandler = asyncHandler(cancelRoomBooking);
 export const getRoomBookingCountHandler = asyncHandler(getRoomBookingCount);
 export const bookRoomThroughId = asyncHandler(bookRoomById);
+export const getBookingHandlerByStatus = asyncHandler(getRoomBookingsByStatus);
 
 //  Widget function//
 
 export const bookRoomThroughGuestId = asyncHandler(bookRoomByGuestId);
+export const getUpcomingBookingsHandler = asyncHandler(getUpcomingBoookings);
+export const getBookingsHandler = asyncHandler(getBookings);
