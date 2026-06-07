@@ -77,125 +77,173 @@ async function getStaffDetails(req: Request, res: Response) {
 
 async function getStaffList(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
-  const staffTypes = ["include", "exclude", "all"];
 
   if (!hotelId) {
-    return res.status(401).json({
-      success: false,
-      message: "Hotel ID is required",
-    });
+    return res
+      .status(401)
+      .json({ success: false, message: "Hotel ID is required" });
   }
 
   const { pageSize, pageNo, search, serviceId, staffType } = req.query;
+  const validStaffTypes = ["include", "exclude", "all"];
 
-  if (!staffTypes.includes(String(staffType))) {
+  if (!validStaffTypes.includes(String(staffType))) {
     return res.status(400).json({
       success: false,
       message: "Invalid staffType. Allowed values are include, exclude, all",
     });
   }
 
-  if ((staffType === "include" || staffType === "exclude") && !serviceId) {
+  // ── Sanitize & validate serviceId early ────────────────────────────────────
+  const rawServiceId = String(serviceId ?? "").trim();
+  const validServiceId = mongoose.Types.ObjectId.isValid(rawServiceId)
+    ? new mongoose.Types.ObjectId(rawServiceId)
+    : null;
+
+  console.log("valid service id", validServiceId);
+
+  if ((staffType === "include" || staffType === "exclude") && !validServiceId) {
     return res.status(400).json({
       success: false,
-      message: "serviceId is required when staffType is include or exclude",
+      message:
+        "A valid serviceId is required when staffType is include or exclude",
     });
   }
 
-  let filter: any = {
-    hotelId: new mongoose.Types.ObjectId(hotelId),
-    isActive: true, // Only return active staff
-  };
+  const page = Number(pageNo) || 1;
+  const limit = Number(pageSize) || 10;
+  const hotelObjectId = new mongoose.Types.ObjectId(String(hotelId));
+
+  // ── Base filter ─────────────────────────────────────────────────────────────
+  const matchFilter: any = { hotelId: hotelObjectId };
 
   if (search) {
-    filter.$or = [
+    matchFilter.$or = [
       { name: { $regex: search, $options: "i" } },
       { email: { $regex: search, $options: "i" } },
     ];
   }
 
-  const aggregationPipeline: any[] = [
-    { $match: filter },
-    {
-      $lookup: {
-        from: "staffservicemappings",
-        let: { staffId: "$_id" },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ["$staffId", "$$staffId"] },
-                  { $eq: ["$isActive", true] },
-                  ...(serviceId
-                    ? [
-                        {
-                          $eq: [
-                            "$serviceId",
-                            new mongoose.Types.ObjectId(String(serviceId)),
-                          ],
-                        },
-                      ]
-                    : []),
-                ],
-              },
+  // ── Lookup: scoped to serviceId — used only for include/exclude filtering ───
+  const filteredServicesLookup = {
+    $lookup: {
+      from: "staffservicemappings",
+      let: { staffId: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ["$staffId", "$$staffId"] },
+                { $eq: ["$isActive", true] },
+                ...(validServiceId
+                  ? [{ $eq: ["$serviceId", validServiceId] }]
+                  : []),
+              ],
             },
           },
-        ],
-        as: "services",
-      },
+        },
+        { $project: { _id: 1 } },
+      ],
+      as: "filteredServices",
     },
+  };
+
+  // ── Lookup: all active services with full details for display ───────────────
+  const assignedServicesLookup = {
+    $lookup: {
+      from: "staffservicemappings",
+      let: { staffId: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ["$staffId", "$$staffId"] },
+                { $eq: ["$isActive", true] },
+              ],
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: "services",
+            localField: "serviceId",
+            foreignField: "_id",
+            as: "serviceDetails",
+          },
+        },
+        {
+          $unwind: {
+            path: "$serviceDetails",
+            preserveNullAndEmptyArrays: false,
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            serviceId: "$serviceDetails._id",
+            name: "$serviceDetails.name",
+            description: "$serviceDetails.description",
+            color: "$serviceDetails.color",
+            isPaid: "$serviceDetails.isPaid",
+          },
+        },
+      ],
+      as: "assignedServices",
+    },
+  };
+
+  // ── Build pipeline ──────────────────────────────────────────────────────────
+  const pipeline: any[] = [
+    { $match: matchFilter },
+    filteredServicesLookup,
+    assignedServicesLookup,
   ];
 
   if (staffType === "include") {
-    aggregationPipeline.push({
-      $match: {
-        "services.0": { $exists: true }, // Has at least one service mapping
-      },
-    });
+    pipeline.push({ $match: { "filteredServices.0": { $exists: true } } });
   } else if (staffType === "exclude") {
-    aggregationPipeline.push({
-      $match: {
-        "services.0": { $exists: false }, // Has no service mappings
-      },
-    });
+    pipeline.push({ $match: { "filteredServices.0": { $exists: false } } });
   }
 
-  const countPipeline = [...aggregationPipeline, { $count: "total" }];
-  const countResult = await Staff.aggregate(countPipeline);
-  const totalCount = countResult.length > 0 ? countResult[0].total : 0;
+  // ── Total count before pagination ───────────────────────────────────────────
+  const [countResult] = await Staff.aggregate([
+    ...pipeline,
+    { $count: "total" },
+  ]);
+  const totalCount = countResult?.total ?? 0;
 
-  aggregationPipeline.push(
+  // ── Final projection + pagination ───────────────────────────────────────────
+  pipeline.push(
     {
       $project: {
+        _id: 0,
+        staffId: "$_id",
         name: 1,
         email: 1,
         phone: 1,
         isAvailable: 1,
         isActive: 1,
-        staffId: "$_id",
-        servicesMapped: { $size: "$services" }, // Count of services mapped
-        _id: 0,
+        servicesMapped: { $size: "$assignedServices" },
+        assignedServices: 1,
+        createdAt: 1,
       },
     },
-    {
-      $skip: ((Number(pageNo) || 1) - 1) * (Number(pageSize) || 10),
-    },
-    {
-      $limit: Number(pageSize) || 10,
-    },
+    { $skip: (page - 1) * limit },
+    { $limit: limit },
   );
 
-  const staff = await Staff.aggregate(aggregationPipeline);
+  const staff = await Staff.aggregate(pipeline);
 
   return res.status(200).json({
     success: true,
     staff,
     pagination: {
       total: totalCount,
-      pageNo: Number(pageNo) || 1,
-      pageSize: Number(pageSize) || 10,
-      totalPages: Math.ceil(totalCount / (Number(pageSize) || 10)),
+      pageNo: page,
+      pageSize: limit,
+      totalPages: Math.ceil(totalCount / limit),
     },
   });
 }
@@ -212,11 +260,7 @@ async function deleteStaff(req: Request, res: Response) {
   }
 
   // Soft delete by setting isActive to false
-  const staff = await Staff.findOneAndUpdate(
-    { _id: id, hotelId },
-    { $set: { isActive: false, isAvailable: false } },
-    { new: true },
-  );
+  const staff = await Staff.deleteOne({ _id: id, hotelId });
 
   if (!staff) {
     return res.status(404).json({
@@ -226,10 +270,7 @@ async function deleteStaff(req: Request, res: Response) {
   }
 
   // Also deactivate all service mappings
-  await StaffServiceMapping.updateMany(
-    { staffId: id },
-    { $set: { isActive: false } },
-  );
+  await StaffServiceMapping.deleteMany({ staffId: id });
 
   return res.status(200).json({
     success: true,

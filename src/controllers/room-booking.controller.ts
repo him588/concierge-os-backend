@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/async-handler";
-import { RoomBooking, RoomBookingStatus } from "../models/room-booking.model";
+import {
+  IRoomBooking,
+  RoomBooking,
+  RoomBookingStatus,
+} from "../models/room-booking.model";
 import { Room } from "../models/room.model";
 import {
   createRoomBookingSchema,
@@ -12,6 +16,7 @@ import { sendBookingEmail } from "../utils/send-email";
 import JWTProvider from "../utils/jwt-provider";
 import razorpay from "../utils/razorpay-config";
 import mongoose from "mongoose";
+import { FilterQuery } from "mongoose";
 
 /**
  * Check if a room is available for the given date range
@@ -349,91 +354,63 @@ async function updateRoomBooking(req: Request, res: Response) {
     });
   }
 
-  const updateData = updateRoomBookingSchema.parse(req.body);
+  const { status } = updateRoomBookingSchema
+    .pick({ status: true })
+    .parse(req.body);
 
-  // Parse dates if provided, but keep type as string
-  // Don't mutate updateData to Date here due to type constraints.
-  // If conversion to Date is needed, do it in a local variable where needed.
+  // Fetch once and reuse across all side-effect checks
+  const existingBooking = await RoomBooking.findOne({ _id: id, hotelId });
 
-  // If dates are being updated, check availability
-  if (updateData.checkIn || updateData.checkOut) {
-    const existingBooking = await RoomBooking.findById(id);
-    if (existingBooking) {
-      const checkIn = updateData.checkIn || existingBooking.checkIn;
-      const checkOut = updateData.checkOut || existingBooking.checkOut;
-      const available = await isRoomAvailable(
-        existingBooking.roomId.toString(),
-        typeof checkIn === "string" ? new Date(checkIn) : checkIn,
-        typeof checkOut === "string" ? new Date(checkOut) : checkOut,
-        id,
-      );
-
-      if (!available) {
-        return res.status(409).json({
-          success: false,
-          message: "Room is not available for the updated dates",
-        });
-      }
-    }
-  }
-
-  // Recalculate if dates or status changed
-  const finalUpdateData: any = { ...updateData };
-  if (
-    finalUpdateData.checkIn ||
-    finalUpdateData.checkOut ||
-    finalUpdateData.status === RoomBookingStatus.CHECKED_OUT
-  ) {
-    // Recalculate will happen in pre-save hook
-    // But we need to fetch room type price for recalculation
-    const existingBooking = await RoomBooking.findById(id);
-    if (existingBooking) {
-      const checkIn = finalUpdateData.checkIn || existingBooking.checkIn;
-      const checkOut = finalUpdateData.checkOut || existingBooking.checkOut;
-      const timeDiff = checkOut.getTime() - checkIn.getTime();
-      const totalNights = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-      finalUpdateData.totalNights = totalNights > 0 ? totalNights : 1;
-      finalUpdateData.totalAmount = totalNights * existingBooking.pricePerNight;
-    }
-  }
-
-  // If status is changed to checked_out or cancelled, make room available again
-  if (
-    updateData.status === RoomBookingStatus.CHECKED_OUT ||
-    updateData.status === RoomBookingStatus.CANCELLED
-  ) {
-    const existingBooking = await RoomBooking.findById(id);
-    if (existingBooking) {
-      await Room.findByIdAndUpdate(existingBooking.roomId, {
-        $set: { status: "available" },
-      });
-    }
-  }
-
-  // If status is changed to checked_in, confirm the booking
-  if (updateData.status === RoomBookingStatus.CHECKED_IN) {
-    finalUpdateData.status = RoomBookingStatus.CHECKED_IN;
-  }
-
-  const booking = await RoomBooking.findOneAndUpdate(
-    { _id: id, hotelId },
-    { $set: finalUpdateData },
-    { new: true, runValidators: true },
-  )
-    .populate({ path: "roomId", select: "roomNumber floor images" })
-    .populate({ path: "roomTypeId", select: "type maxGuest price" })
-    .populate({ path: "guestId", select: "name email" });
-
-  if (!booking) {
+  if (!existingBooking) {
     return res.status(404).json({
       success: false,
       message: "Room booking not found",
     });
   }
 
+  // Guard against invalid status transitions
+  const validTransitions: Record<RoomBookingStatus, RoomBookingStatus[]> = {
+    [RoomBookingStatus.PENDING]: [
+      RoomBookingStatus.CONFIRMED,
+      RoomBookingStatus.CANCELLED,
+    ],
+    [RoomBookingStatus.CONFIRMED]: [
+      RoomBookingStatus.CHECKED_IN,
+      RoomBookingStatus.CANCELLED,
+    ],
+    [RoomBookingStatus.CHECKED_IN]: [RoomBookingStatus.CHECKED_OUT],
+    [RoomBookingStatus.CHECKED_OUT]: [],
+    [RoomBookingStatus.CANCELLED]: [],
+  };
+
+  const allowed = validTransitions[existingBooking.status] ?? [];
+
+  if (!status) {
+    return res.status(400).json({
+      message: "Room bookings status is required to proceed furthur",
+      status: false,
+    });
+  }
+
+  if (!allowed.includes(status)) {
+    return res.status(422).json({
+      success: false,
+      message: `Cannot transition from '${existingBooking.status}' to '${status}'`,
+    });
+  }
+
+  const booking = await RoomBooking.findOneAndUpdate(
+    { _id: id, hotelId },
+    { $set: { status } },
+    { new: true, runValidators: true, context: "query" },
+  )
+    .populate({ path: "roomId", select: "roomNumber floor images" })
+    .populate({ path: "roomTypeId", select: "type maxGuest price" })
+    .populate({ path: "guestId", select: "name email" });
+
   return res.status(200).json({
     success: true,
-    message: "Room booking updated successfully",
+    message: "Room booking status updated successfully",
     data: booking,
   });
 }
@@ -723,8 +700,8 @@ async function getUpcomingBoookings(req: Request, res: Response) {
     });
   }
   const bookings = await RoomBooking.find({
-    guestId,
-    hotelId,
+    guestId: new mongoose.Types.ObjectId(guestId),
+    hotelId: new mongoose.Types.ObjectId(hotelId as string),
     status: {
       $in: [RoomBookingStatus.CONFIRMED, RoomBookingStatus.CHECKED_IN],
     },
@@ -825,6 +802,149 @@ async function getBookings(req: Request, res: Response) {
   });
 }
 
+async function getRoomBookingsDynamic(req: Request, res: Response) {
+  const { offset, pageSize, status, search, roomId, roomType } = req.query;
+  const hotelId = req.user?.hotelId || req.body.hotelId;
+  let searchQuery: FilterQuery<IRoomBooking> = {};
+
+  if (!hotelId) {
+    return res.status(400).json({
+      status: false,
+      message: "Hotel Id is missing",
+    });
+  }
+
+  searchQuery.hotelId = new mongoose.Types.ObjectId(hotelId);
+
+  if (roomId && (typeof roomId === "string" || typeof roomId === "number")) {
+    searchQuery.roomId = new mongoose.Types.ObjectId(roomId);
+  }
+
+  if (
+    roomType &&
+    (typeof roomType === "string" || typeof roomType === "number")
+  ) {
+    searchQuery.roomType = new mongoose.Types.ObjectId(roomType);
+  }
+
+  if (typeof status === "string") {
+    switch (status) {
+      case "pending":
+        searchQuery.status = RoomBookingStatus.PENDING;
+        break;
+      case "confirmed":
+        searchQuery.status = RoomBookingStatus.CONFIRMED;
+        break;
+      case "checked_in":
+        searchQuery.status = RoomBookingStatus.CHECKED_IN;
+        break;
+      case "checked_out":
+        searchQuery.status = RoomBookingStatus.CHECKED_OUT;
+        break;
+      case "cancelled":
+        searchQuery.status = RoomBookingStatus.CANCELLED;
+        break;
+      default:
+    }
+  }
+
+  if (search) {
+    searchQuery.$or = [
+      { guestName: { $regex: search, $options: "i" } },
+      { guestEmail: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  if (!pageSize || !offset) {
+    return res.status(400).json({
+      message: "Page size and limit is required",
+      status: false,
+    });
+  }
+
+  const bookings = await RoomBooking.aggregate([
+    {
+      $match: searchQuery,
+    },
+
+    {
+      $lookup: {
+        from: "widgetusers",
+        localField: "guestId",
+        foreignField: "_id",
+        as: "guestDetails",
+      },
+    },
+    {
+      $addFields: {
+        guestName: {
+          $cond: {
+            if: { $gt: [{ $strLenCP: { $ifNull: ["$guestName", ""] } }, 0] },
+            then: "$guestName",
+            else: { $arrayElemAt: ["$guestDetails.name", 0] },
+          },
+        },
+        guestEmail: {
+          $cond: {
+            if: { $gt: [{ $strLenCP: { $ifNull: ["$guestEmail", ""] } }, 0] },
+            then: "$guestEmail",
+            else: { $arrayElemAt: ["$guestDetails.email", 0] },
+          },
+        },
+        guestPhone: { $ifNull: ["$guestPhone", null] },
+      },
+    },
+
+    ...(search
+      ? [
+          {
+            $match: {
+              $or: [
+                { guestName: { $regex: search, $options: "i" } },
+                { guestEmail: { $regex: search, $options: "i" } },
+              ],
+            },
+          },
+        ]
+      : []),
+
+    {
+      $sort: { createdAt: -1, checkIn: -1 },
+    },
+    {
+      $skip: +offset,
+    },
+    {
+      $limit: +pageSize,
+    },
+    {
+      $project: {
+        _id: 0,
+        bookingId: "$_id",
+        checkIn: 1,
+        checkOut: 1,
+        guestName: 1,
+        guestPhone: 1,
+        guestEmail: 1,
+        totalAmount: 1,
+        totalNights: 1,
+        status: 1,
+      },
+    },
+  ]);
+
+  const bookingsCount = await RoomBooking.countDocuments(searchQuery);
+  const totalPages = Math.ceil(bookingsCount / Number(pageSize));
+
+  return res.status(200).json({
+    status: true,
+    message: "Booking finds successfully",
+    bookings: bookings,
+    totalPages,
+    totalBookings: bookingsCount,
+  });
+}
+
 export const createRoomBookingHandler = asyncHandler(createRoomBooking);
 export const getRoomBookingsHandler = asyncHandler(getRoomBookings);
 export const getRoomBookingByIdHandler = asyncHandler(getRoomBookingById);
@@ -833,6 +953,9 @@ export const cancelRoomBookingHandler = asyncHandler(cancelRoomBooking);
 export const getRoomBookingCountHandler = asyncHandler(getRoomBookingCount);
 export const bookRoomThroughId = asyncHandler(bookRoomById);
 export const getBookingHandlerByStatus = asyncHandler(getRoomBookingsByStatus);
+export const getDynamicRoomBookingsHandler = asyncHandler(
+  getRoomBookingsDynamic,
+);
 
 //  Widget function//
 

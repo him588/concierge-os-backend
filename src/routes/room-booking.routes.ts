@@ -10,6 +10,7 @@ import {
   bookRoomThroughId,
   getUpcomingBookingsHandler,
   getBookingsHandler,
+  getDynamicRoomBookingsHandler,
 } from "../controllers/room-booking.controller";
 
 export const roomBookingRoute = express.Router();
@@ -18,6 +19,7 @@ export const roomBookingRoute = express.Router();
 roomBookingRoute.post("/book-room", bookRoomThroughGuestId);
 roomBookingRoute.get("/get-bookings/upcoming", getUpcomingBookingsHandler);
 roomBookingRoute.get("/get-bookings", getBookingsHandler);
+roomBookingRoute.get("/dynamic-bookings", getDynamicRoomBookingsHandler);
 
 roomBookingRoute.get("/get-booking-count/:id", getRoomBookingCountHandler);
 roomBookingRoute.post("/", createRoomBookingHandler);

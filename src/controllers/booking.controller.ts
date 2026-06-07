@@ -11,6 +11,12 @@ import {
 import { Service } from "../models/service.model";
 import { RoomBooking, RoomBookingStatus } from "../models/room-booking.model";
 import { ServiceBookingPayload } from "../types/type";
+import mongoose from "mongoose";
+import JWTProvider from "../utils/jwt-provider";
+import { sendServiceBookingEmail } from "../utils/send-email";
+import { WidgetUser } from "../models/widget-user.model";
+import razorpay from "../utils/razorpay-config";
+import { Property } from "../models/property.model";
 
 /**
  * Helper function to automatically assign staff to a booking
@@ -53,12 +59,16 @@ async function createBooking(req: Request, res: Response) {
     });
   }
 
-  const checkIsBookingValid = await RoomBooking.findOne({
-    _id: roomBookingId,
-    status: {
-      $in: [RoomBookingStatus.CHECKED_IN, RoomBookingStatus.CONFIRMED],
-    },
-  });
+  const [checkIsBookingValid, guest, hotel] = await Promise.all([
+    RoomBooking.findOne({
+      _id: roomBookingId,
+      status: {
+        $in: [RoomBookingStatus.CHECKED_IN, RoomBookingStatus.CONFIRMED],
+      },
+    }),
+    WidgetUser.findById(guestId),
+    Property.findById(hotelId),
+  ]);
 
   if (!checkIsBookingValid) {
     return res.status(400).json({
@@ -66,22 +76,20 @@ async function createBooking(req: Request, res: Response) {
       message: "Your Room Booking is not longer valid",
     });
   }
+
   const results = await Promise.all(
     serviceList.map(async (item: ServiceBookingPayload) => {
       try {
-        const service = await ServiceItem.findById(item.itemId);
+        const [service, existing] = await Promise.all([
+          ServiceItem.findById(item.itemId),
+          Booking.findOne({
+            serviceItemId: item.itemId,
+            status: { $in: [BookingStatus.CONFIRMED, BookingStatus.PENDING] },
+            roomBookingId: roomBookingId,
+          }),
+        ]);
 
-        if (!service) {
-          return { type: "unprocessed", item };
-        }
-
-        const existing = await Booking.findOne({
-          serviceItemId: item.itemId,
-          status: { $in: [BookingStatus.CONFIRMED, BookingStatus.PENDING] },
-          roomBookingId: roomBookingId,
-        });
-
-        if (existing) {
+        if (!service || existing) {
           return { type: "unprocessed", item };
         }
 
@@ -130,14 +138,77 @@ async function createBooking(req: Request, res: Response) {
     .filter((r) => r.type === "unprocessed")
     .map((r) => r.item);
 
+  console.log("processed services", processedServiceQue);
+  console.log("unprocessed services", unProcessedServiceQue);
+
   if (processedServiceQue.length > 0) {
-    const createBooking = await Booking.insertMany(processedServiceQue);
-    console.log("all created booking", createBooking);
+    console.log("going towards processed services");
+    const createdBookings = await Booking.insertMany(processedServiceQue);
+
+    const paidBookings = await Booking.find({
+      _id: { $in: createdBookings.map((b) => b._id) },
+      totalAmount: { $gt: 0 },
+    }).populate<{ serviceItemId: { name: string } }>("serviceItemId");
+    console.log("all the piad bookings", paidBookings);
+    if (paidBookings.length > 0) {
+      const totalAmount = paidBookings.reduce(
+        (sum, b) => sum + b.totalAmount,
+        0,
+      );
+
+      const [order] = await Promise.all([
+        razorpay.orders.create({
+          amount: totalAmount * 100,
+          currency: "INR",
+          receipt: `receipt_${Date.now()}`,
+        }),
+      ]);
+
+      const paymentToken = JWTProvider.generatePaymentToken({
+        guestId: guestId,
+        bookingType: "service",
+        services: paidBookings.map((b) => ({
+          sevicesBookingId: (b._id as any).toString(),
+          seviceName: (b.serviceItemId as any)?.name || "Service",
+          status: b.status,
+        })),
+        orderId: order.id,
+      });
+
+      console.log("my payment token ", paymentToken);
+
+      if (guest?.email) {
+        sendServiceBookingEmail(
+          "../templates",
+          "service-booking.html",
+          process.env.EMAIL_USER!,
+          guest.email,
+          "Service Booking Pending - Please Complete Your Payment",
+          hotel?.name || "Hotel",
+          new Date().getFullYear().toString(),
+          hotel?.location?.city || "City",
+          hotel?.location?.country || "State",
+          (createdBookings[0]._id as any).toString(),
+          guest?.name || "Guest",
+          checkIsBookingValid.roomId.toString(),
+          paidBookings.map((b) => ({
+            name: (b.serviceItemId as any)?.name || "Service",
+            quantity: b.quantity ?? b.person ?? 1,
+            amount: b.totalAmount,
+          })),
+          totalAmount.toString(),
+          `${process.env.CLIENT_URL}/payment/${paymentToken}`,
+          "15 minutes",
+        );
+      }
+    }
   }
 
   return res.status(200).json({
     success: true,
-    message: `Booking processed successfully. ${processedServiceQue.length} out of ${processedServiceQue.length + unProcessedServiceQue.length} services were booked.`,
+    message: `Booking processed successfully. ${processedServiceQue.length} out of ${
+      processedServiceQue.length + unProcessedServiceQue.length
+    } services were booked.`,
     proccessedItem: processedServiceQue,
     unproccessedItem: unProcessedServiceQue,
   });
@@ -145,7 +216,11 @@ async function createBooking(req: Request, res: Response) {
 
 async function getBookings(req: Request, res: Response) {
   const hotelId = req.user?.hotelId;
-  const { status, guestId, staffId, serviceId } = req.query;
+  const { status, guestId, staffId, serviceId, pageSize, offset } = req.query;
+
+  if (!pageSize || !offset) {
+    return res.status(400).json({ message: "Bad request", status: false });
+  }
 
   if (!hotelId) {
     return res.status(401).json({
@@ -157,7 +232,14 @@ async function getBookings(req: Request, res: Response) {
   const filter: any = { hotelId };
 
   if (status) {
-    filter.status = status;
+    if (Object.values(BookingStatus).includes(status as BookingStatus)) {
+      filter.status = status;
+    } else {
+      return res.status(400).json({
+        status: false,
+        message: `Status should be of type ${BookingStatus} `,
+      });
+    }
   }
 
   if (guestId) {
@@ -179,6 +261,8 @@ async function getBookings(req: Request, res: Response) {
     .populate({ path: "guestId", select: "name email" })
     .populate({ path: "roomId", select: "roomNumber floor" })
     .sort({ createdAt: -1 })
+    .limit(+pageSize)
+    .skip(+offset)
     .select("-__v");
 
   return res.status(200).json({

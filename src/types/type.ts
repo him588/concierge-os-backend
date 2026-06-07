@@ -1,3 +1,5 @@
+import { BookingStatus } from "../models/booking.model";
+
 export enum PropertyType {
   Hotel = "Hotel",
   Villa = "Villa",
@@ -17,7 +19,11 @@ export type PaymentPayload = {
   bookingType: "room" | "service";
   guestId: string;
   rooms?: [{ roomBookingId: string }];
-  services?: [{ sevicesBookingId?: string; seviceName: string }];
+  services?: {
+    sevicesBookingId?: string;
+    seviceName: string;
+    status: BookingStatus;
+  }[];
   orderId: string;
 };
 

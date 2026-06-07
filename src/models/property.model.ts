@@ -30,6 +30,8 @@ export interface IProperty extends Document {
     name: string;
     employees: Types.ObjectId[];
   }[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const propertySchema = new Schema<IProperty>(

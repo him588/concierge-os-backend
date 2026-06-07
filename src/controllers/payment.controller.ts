@@ -4,6 +4,7 @@ import { RoomBooking, RoomBookingStatus } from "../models/room-booking.model";
 import { asyncHandler } from "../utils/async-handler";
 import crypto from "crypto";
 import { sendConfirmedBookingEmail } from "../utils/send-email";
+import { Booking, BookingStatus } from "../models/booking.model";
 
 async function fetchPaymentDetails(req: Request, res: Response) {
   const { id } = req.params;
@@ -15,42 +16,101 @@ async function fetchPaymentDetails(req: Request, res: Response) {
       return res
         .status(400)
         .json({ message: "Invalid payment token", status: false });
-    const bookingId = decodeToken.rooms[0].roomBookingId;
-    if (!bookingId)
-      return res.status(400).json({
-        message: "Invalid payment token - missing booking ID",
-        status: false,
-      });
-    const bookingDetails = await RoomBooking.find({ _id: bookingId })
-      .populate({
-        path: "roomTypeId",
-        select: "type price capacity", // only these fields
-      })
-      .populate({
-        path: "roomId",
-        select: "roomNumber", // only these fields
-      })
-      .populate({
-        path: "guestId",
-        select: "name email", // only these fields
-      })
-      .select("-__v -createdAt -updatedAt"); // exclude these fields
-    if (!bookingDetails)
-      return res.status(404).json({
-        message: "Booking not found for the provided token",
-        status: false,
-      });
-    console.log("Decoded Payment Token:", decodeToken);
+    if (decodeToken.bookingType === "room") {
+      const bookingId = decodeToken.rooms[0].roomBookingId;
+      if (!bookingId)
+        return res.status(400).json({
+          message: "Invalid payment token - missing booking ID",
+          status: false,
+        });
+      const bookingDetails = await RoomBooking.find({ _id: bookingId })
+        .populate({
+          path: "roomTypeId",
+          select: "type price capacity",
+        })
+        .populate({
+          path: "roomId",
+          select: "roomNumber",
+        })
+        .populate({
+          path: "guestId",
+          select: "name email",
+        })
+        .select("-__v -createdAt -updatedAt");
+      if (!bookingDetails)
+        return res.status(404).json({
+          message: "Booking not found for the provided token",
+          status: false,
+        });
+      console.log("Decoded Payment Token:", decodeToken);
 
-    return res.status(200).json({
-      message: "Payment details fetched successfully",
-      status: true,
-      paymentDetails: {
-        ...bookingDetails[0].toObject(),
-        orderId: decodeToken.orderId,
-        orderKey: process.env.RazorpayKeyId,
-      },
-    });
+      return res.status(200).json({
+        message: "Payment details fetched successfully",
+        status: true,
+        paymentDetails: {
+          ...bookingDetails[0].toObject(),
+          orderId: decodeToken.orderId,
+          orderKey: process.env.RazorpayKeyId,
+        },
+      });
+    }
+    if (decodeToken.bookingType === "service") {
+      const serviceBookingIds = decodeToken.services.map(
+        (s: { sevicesBookingId: string }) => s.sevicesBookingId,
+      );
+
+      if (!serviceBookingIds.length)
+        return res.status(400).json({
+          message: "Invalid payment token - no services found",
+          status: false,
+        });
+
+      const bookings = await Booking.find({
+        _id: { $in: serviceBookingIds },
+      })
+        .populate({
+          path: "serviceItemId",
+          select: "name description listingType",
+        })
+        .populate({ path: "guestId", select: "name email" })
+        .select("-__v -createdAt -updatedAt");
+
+      if (!bookings?.length)
+        return res.status(404).json({
+          message: "Service bookings not found for the provided token",
+          status: false,
+        });
+
+      const grandTotal = bookings.reduce((sum, b) => sum + b.totalAmount, 0);
+
+      return res.status(200).json({
+        message: "Payment details fetched successfully",
+        status: true,
+        paymentDetails: {
+          bookingType: "service",
+          guestId: bookings[0].guestId,
+          services: bookings.map((b) => ({
+            bookingId: b._id,
+            serviceName: (b.serviceItemId as any).name,
+            description: (b.serviceItemId as any).description,
+            listingType: (b.serviceItemId as any).listingType,
+            quantity: b.quantity,
+            price: b.price,
+            totalAmount: b.totalAmount,
+            status: b.status,
+            scheduledAt: b.scheduledAt ?? null,
+            notes: b.notes ?? null,
+          })),
+          grandTotal,
+          orderId: decodeToken.orderId,
+          orderKey: process.env.RazorpayKeyId,
+        },
+      });
+    }
+
+    return res
+      .status(400)
+      .json({ status: false, message: "Unexpected error occured" });
   } else {
     res
       .status(400)
@@ -168,6 +228,28 @@ export async function verifyPayment(req: Request, res: Response) {
             (bookingDetails.guestId as any).email,
           );
         }
+      }
+      if (payment && payment.notes && payment.notes.bookingIds) {
+        console.log("booking notes", payment.notes);
+        const bookingIds = payment.notes.bookingIds
+          .split(",")
+          .map((id: string) => id.trim())
+          .filter((id: string) => id.length === 24); // valid ObjectId length
+
+        if (!bookingIds.length) {
+          console.log(
+            "⚠️ No valid booking IDs found in notes:",
+            payment.notes.bookingIds,
+          );
+          break;
+        }
+
+        await Booking.updateMany(
+          { _id: { $in: bookingIds } },
+          { $set: { status: BookingStatus.CONFIRMED } },
+        );
+
+        console.log("✅ Service bookings confirmed:", bookingIds);
       }
 
       console.log("Payment captured for order:", orderId);

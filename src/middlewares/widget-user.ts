@@ -7,11 +7,8 @@ export async function authenticateWidgetUser(
   res: Response,
   next: NextFunction,
 ) {
-  console.log("Authenticating widget user...");
   const { headers } = req;
-  console.log(headers);
   const token = headers.authorization;
-  console.log("is token available", token);
   if (token?.includes("Bearer")) {
     try {
       const userDetails = JWTProvider.verifyAccessToken(

@@ -92,7 +92,12 @@ async function getProperty(req: Request, res: Response) {
     });
   }
 
-  const property = await Property.findOne({ _id: id });
+  const property = await Property.findOne({ _id: id }).populate<{
+    ownedBy: {
+      name: string;
+    };
+  }>("ownedBy", "name");
+
   if (!property) {
     return res.status(400).json({
       status: false,
@@ -100,10 +105,21 @@ async function getProperty(req: Request, res: Response) {
     });
   }
 
+  const propertyDetails = {
+    ownerName: property?.ownedBy?.name || "",
+    address: `${property.location.streetAddress || ""} ${property.location.city || ""} ${property.location.country}`,
+    propertyId: property._id,
+    contactNo: property.contacts.phone,
+    email: property.contacts.email,
+    propertyName: property.name,
+    propertyType: property.propertyType,
+    joiningDate: property.createdAt,
+  };
+
   return res.status(200).json({
     status: true,
     message: "property details fetched successfully",
-    property,
+    property: propertyDetails,
   });
 }
 

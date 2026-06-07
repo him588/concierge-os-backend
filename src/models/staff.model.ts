@@ -6,6 +6,8 @@ export interface IStaff extends Document {
   phone?: string;
   hotelId: Types.ObjectId;
   password: string;
+  isActive: boolean;
+  isAvailable: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +37,16 @@ const staffSchema = new Schema<IStaff>(
       type: Schema.Types.ObjectId,
       ref: "Property",
       required: true,
+      index: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    isAvailable: {
+      type: Boolean,
+      default: true,
       index: true,
     },
   },

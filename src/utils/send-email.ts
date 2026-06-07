@@ -346,3 +346,83 @@ export function sendScheduledBookingCancelled(
     }
   });
 }
+
+export function sendServiceBookingEmail(
+  directory: string,
+  fileName: string,
+  senderEmail: string,
+  receiverEmail: string,
+  subject: string,
+  propertyName: string,
+  year: string,
+  city: string,
+  state: string,
+  bookingId: string,
+  guestName: string,
+  roomNumber: string,
+  services: { name: string; quantity: number; amount: number }[],
+  totalAmount: string,
+  paymentLink: string,
+  expireTime: string,
+) {
+  const htmlPath = path.join(__dirname, directory, fileName);
+  let htmlContent = fs.readFileSync(htmlPath, "utf8");
+
+  // Build the service rows HTML
+  const serviceRows = services
+    .map(
+      (s) => `
+      <table style="width: 100%; margin-bottom: 8px">
+        <tr>
+          <td style="font-size: 14px; color: #1c1917">
+            🔹 ${escapeHtml(s.name)} × ${s.quantity}
+          </td>
+          <td align="right" style="font-size: 14px; color: #78716c">
+            ₹${s.amount}
+          </td>
+        </tr>
+      </table>`,
+    )
+    .join("");
+
+  const data: Record<string, string | number> = {
+    propertyName,
+    year,
+    city,
+    state,
+    bookingId,
+    guestName,
+    roomNumber,
+    totalAmount,
+    paymentLink,
+    expireTime,
+  };
+
+  // fillTemplate handles {{ }} placeholders but NOT serviceRows
+  // (serviceRows has raw HTML so we inject it separately before escaping)
+  htmlContent = htmlContent.replace("{{ serviceRows }}", serviceRows);
+  htmlContent = fillTemplate(htmlContent, data);
+
+  const transporter = createTransport({
+    service: "Gmail",
+    auth: {
+      user: senderEmail,
+      pass: process.env.EMAIL_PASS!,
+    },
+  });
+
+  const mailOptions = {
+    from: senderEmail,
+    to: receiverEmail,
+    subject,
+    html: htmlContent,
+  };
+
+  transporter.sendMail(mailOptions, function (error, info) {
+    if (error) {
+      console.error("Service booking email error:", error);
+    } else {
+      console.log("Service booking email sent:", info.response);
+    }
+  });
+}

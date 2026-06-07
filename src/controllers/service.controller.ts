@@ -44,7 +44,6 @@ async function createService(req: Request, res: Response) {
 
   const isStaffAvailable = await Staff.findOne({
     hotelId,
-    isAvailable: true,
   });
 
   if (!isStaffAvailable) {
