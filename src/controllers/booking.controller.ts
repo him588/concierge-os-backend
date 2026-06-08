@@ -10,8 +10,8 @@ import {
 } from "../validators/booking.validator";
 import { Service } from "../models/service.model";
 import { RoomBooking, RoomBookingStatus } from "../models/room-booking.model";
-import { ServiceBookingPayload } from "../types/type";
-import mongoose from "mongoose";
+import { PopulatedBooking, ServiceBookingPayload } from "../types/type";
+import mongoose, { Types } from "mongoose";
 import JWTProvider from "../utils/jwt-provider";
 import { sendServiceBookingEmail } from "../utils/send-email";
 import { WidgetUser } from "../models/widget-user.model";
@@ -231,44 +231,63 @@ async function getBookings(req: Request, res: Response) {
 
   const filter: any = { hotelId };
 
-  if (status) {
+  if (status && status !== "all") {
     if (Object.values(BookingStatus).includes(status as BookingStatus)) {
       filter.status = status;
     } else {
       return res.status(400).json({
         status: false,
-        message: `Status should be of type ${BookingStatus} `,
+        message: `Status should be of type ${BookingStatus}`,
       });
     }
   }
 
-  if (guestId) {
-    filter.guestId = guestId;
-  }
+  if (guestId) filter.guestId = guestId;
+  if (staffId) filter.assignedStaffId = staffId;
+  if (serviceId) filter.serviceId = serviceId;
 
-  if (staffId) {
-    filter.assignedStaffId = staffId;
-  }
+  const [bookings, totalBookings] = await Promise.all([
+    Booking.find(filter)
+      .populate({ path: "serviceItemId", select: "name price" })
+      .populate({ path: "serviceId", select: "name" })
+      .populate({ path: "assignedStaffId", select: "name email" })
+      .populate({ path: "guestId", select: "name email" })
+      .populate({ path: "roomId", select: "roomNumber floor" })
+      .sort({ createdAt: -1 })
+      .limit(+pageSize)
+      .skip(+offset)
+      .select("-__v")
+      .lean() as unknown as Promise<PopulatedBooking[]>,
+    Booking.countDocuments(filter),
+  ]);
 
-  if (serviceId) {
-    filter.serviceId = serviceId;
-  }
-
-  const bookings = await Booking.find(filter)
-    .populate({ path: "serviceItemId", select: "name price" })
-    .populate({ path: "serviceId", select: "name" })
-    .populate({ path: "assignedStaffId", select: "name email" })
-    .populate({ path: "guestId", select: "name email" })
-    .populate({ path: "roomId", select: "roomNumber floor" })
-    .sort({ createdAt: -1 })
-    .limit(+pageSize)
-    .skip(+offset)
-    .select("-__v");
+  const flattenedBookings = bookings.map((booking) => ({
+    id: booking._id,
+    status: booking.status,
+    quantity: booking.quantity,
+    createdAt: booking.createdAt,
+    serviceId: booking.serviceId?._id ?? null,
+    serviceName: booking.serviceId?.name ?? null,
+    serviceItemId: booking.serviceItemId?._id ?? null,
+    serviceItemName: booking.serviceItemId?.name ?? null,
+    serviceItemPrice: booking.serviceItemId?.price ?? null,
+    guestId: booking.guestId?._id ?? null,
+    guestName: booking.guestId?.name ?? null,
+    guestEmail: booking.guestId?.email ?? null,
+    staffId: booking.assignedStaffId?._id ?? null,
+    staffName: booking.assignedStaffId?.name ?? null,
+    staffEmail: booking.assignedStaffId?.email ?? null,
+    roomId: booking.roomId?._id ?? null,
+    roomNumber: booking.roomId?.roomNumber ?? null,
+    roomFloor: booking.roomId?.floor ?? null,
+  }));
 
   return res.status(200).json({
     success: true,
     message: "Bookings fetched successfully",
-    data: bookings,
+    totalBookings,
+    totalPages: Math.ceil(totalBookings / +pageSize),
+    bookings: flattenedBookings,
   });
 }
 

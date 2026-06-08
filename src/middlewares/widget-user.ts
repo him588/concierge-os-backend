@@ -7,6 +7,7 @@ export async function authenticateWidgetUser(
   res: Response,
   next: NextFunction,
 ) {
+  console.log("request goes for widget user");
   const { headers } = req;
   const token = headers.authorization;
   if (token?.includes("Bearer")) {

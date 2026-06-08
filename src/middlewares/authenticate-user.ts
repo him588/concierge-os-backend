@@ -8,10 +8,9 @@ export async function authenticateUser(
   res: Response,
   next: NextFunction,
 ) {
+  console.log("request goes for hotel owner");
   const { headers } = req;
-  console.log(headers);
   const token = headers.authorization;
-  console.log("is token available", token);
   if (token?.includes("Bearer")) {
     try {
       const userDetails = JWTProvider.verifyAccessToken(

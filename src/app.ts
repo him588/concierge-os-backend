@@ -83,7 +83,7 @@ app.use(
   isHotelOwner,
   roomBookingRoute,
 );
-app.use("/api/v1/overview", overviewRoute);
+app.use("/api/v1/overview", authenticateUser, isHotelOwner, overviewRoute);
 
 // Widget routes (public)
 app.use("/widget/auth", authRouter);

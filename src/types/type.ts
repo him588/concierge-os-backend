@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { BookingStatus } from "../models/booking.model";
 
 export enum PropertyType {
@@ -42,3 +43,19 @@ export interface BookingCell {
   sublabel?: string;
   bookings: number; // raw count, not a percentage
 }
+
+export type PopulatedBooking = {
+  _id: Types.ObjectId;
+  status: BookingStatus;
+  createdAt: Date;
+  serviceId: { _id: Types.ObjectId; name: string } | null;
+  serviceItemId: { _id: Types.ObjectId; name: string; price: number } | null;
+  guestId: { _id: Types.ObjectId; name: string; email: string } | null;
+  assignedStaffId: {
+    _id: Types.ObjectId;
+    name: string;
+    email: string;
+  } | null;
+  roomId: { _id: Types.ObjectId; roomNumber: string; floor: number } | null;
+  quantity: number;
+};

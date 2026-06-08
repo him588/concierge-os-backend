@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/async-handler";
 import { RoomBooking } from "../models/room-booking.model";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import {
   formatChartData,
   getDateRange,
@@ -42,7 +42,13 @@ const getOverviewController = async (req: Request, res: Response) => {
     const { startTime: prevStart, endTime: prevEnd } = getPreviousDateRange(
       timeframe as string,
     );
-    const hotelId = "69b5a814b970ab623ecdb80c";
+    const hotelId = req.user?.hotelId;
+    if (!hotelId) {
+      return res.status(401).json({
+        message: "hotel id is requires",
+        status: false,
+      });
+    }
 
     // ── Current period ──────────────────────────────────────────
     const [
@@ -55,10 +61,12 @@ const getOverviewController = async (req: Request, res: Response) => {
     ] = await Promise.all([
       RoomBooking.countDocuments({
         createdAt: { $gte: startTime, $lt: endTime },
+        hotelId: new mongoose.Types.ObjectId(hotelId),
       }),
       RoomBooking.countDocuments({
         checkIn: { $lt: endTime },
         checkOut: { $gte: startTime },
+        hotelId: new mongoose.Types.ObjectId(hotelId),
       }),
       Booking.countDocuments({
         hotelId,
@@ -122,7 +130,14 @@ const getOverviewController = async (req: Request, res: Response) => {
 };
 
 async function getBookingData(req: Request, res: Response) {
-  const hotelId = "69b5a814b970ab623ecdb80c";
+  const hotelId = req.user?.hotelId;
+  if (!hotelId) {
+    return res.status(401).json({
+      message: "hotel id is requires",
+      status: false,
+    });
+  }
+
   const { timeframe } = req.query;
   const { startTime, endTime } = getDateRange(timeframe as string);
 
@@ -280,7 +295,8 @@ async function getYearData(hotelId: string): Promise<BookingCell[]> {
 }
 
 async function getServicesData(req: Request, res: Response) {
-  const hotelId = "69b5a814b970ab623ecdb80c";
+  const hotelId = req.user?.hotelId;
+
   if (!hotelId) {
     return res.status(401).json({ success: false, error: "Unauthorized" });
   }
@@ -311,7 +327,13 @@ async function getServicesData(req: Request, res: Response) {
 }
 
 async function getLatestBooking(req: Request, res: Response) {
-  const hotelId = "69b5a814b970ab623ecdb80c";
+  const hotelId = req.user?.hotelId;
+  if (!hotelId) {
+    return res.status(401).json({
+      message: "hotel id is requires",
+      status: false,
+    });
+  }
   const latestBookings = await RoomBooking.find({
     hotelId: new Types.ObjectId(hotelId),
     status: { $in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },

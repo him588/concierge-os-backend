@@ -20,6 +20,6 @@ bookingRoute.post("/", authenticateWidgetUser, createBookingHandler);
 
 // Admin/Owner routes - require authentication
 
-bookingRoute.get("/", getBookingsHandler);
+bookingRoute.get("/", authenticateUser, getBookingsHandler);
 bookingRoute.get("/:id", getBookingByIdHandler);
 bookingRoute.put("/:id", updateBookingHandler);
