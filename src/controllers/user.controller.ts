@@ -3,7 +3,6 @@ import { User } from "../models/user.model";
 import bcrypt from "bcrypt";
 import { generateOtp4 } from "../helper/helper";
 import { sendOtpEmail } from "../utils/send-email";
-import client from "../utils/redis-client";
 import jwt from "jsonwebtoken";
 import JWTProvider from "../utils/jwt-provider";
 import { UserPayload } from "../types/express";
@@ -180,10 +179,6 @@ export async function ResendOtp(req: Request, res: Response) {
 
     const otp = generateOtp4();
 
-    await client.set(`OTP${user._id}`, otp, {
-      EX: 300, // expires in 5 minutes
-    });
-
     // 6️⃣ Send OTP via email
     sendOtpEmail(
       "../templates",
@@ -295,7 +290,7 @@ export async function refreshAccessToken(req: Request, res: Response) {
   try {
     const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) {
-      return res.status(400).json({ message: "Refresh token is required" });
+      return res.status(401).json({ message: "Refresh token is required" });
     }
     if (JWTProvider.isTokenExpired(refreshToken)) {
       return res.status(401).json({ message: "Session Expired" });

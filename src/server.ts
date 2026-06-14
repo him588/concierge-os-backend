@@ -4,7 +4,6 @@ dotenv.config();
 
 import app from "./app";
 import { connectDb } from "./database/database";
-import { connectRedis } from "./utils/redis-client";
 
 const port = process.env.PORT || 3000;
 
