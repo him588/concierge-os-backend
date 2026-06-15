@@ -290,7 +290,7 @@ export async function refreshAccessToken(req: Request, res: Response) {
   try {
     const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) {
-      return res.status(401).json({ message: "Refresh token is required" });
+      return res.status(400).json({ message: "Refresh token is required" });
     }
     if (JWTProvider.isTokenExpired(refreshToken)) {
       return res.status(401).json({ message: "Session Expired" });
